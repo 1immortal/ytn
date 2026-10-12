@@ -285,7 +285,21 @@ fun RestoreGuardDialog(file: RestoreFile, hostname: String?, serverName: String?
         icon = { Icon(Icons.Rounded.Restore, null, tint = MaterialTheme.colorScheme.error) },
         title = { Text("Restore configuration to ${serverName ?: hostname ?: "the NAS"}?") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.verticalScroll(rememberScrollState())) { RestoreGuardBody(file, hostname, typed) { typed = it } }
+        },
+        confirmButton = {
+            DestructiveButton(onClick = { guard.guard("Restore the NAS configuration", onConfirm) }, enabled = ok, modifier = Modifier.testTag(RESTORE_CONFIRM_TAG)) {
+                Text("Restore & reboot", maxLines = 1)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** The guard's explanation and type-to-confirm field (also rendered on its own by the screenshot test). */
+@Composable
+fun RestoreGuardBody(file: RestoreFile, hostname: String?, typed: String, onTyped: (String) -> Unit) {
+    Column {
                 RestoreFileFacts(file)
                 Spacer(Modifier.height(10.dp))
                 if (file.refuse != null) {
@@ -302,21 +316,13 @@ fun RestoreGuardDialog(file: RestoreFile, hostname: String?, serverName: String?
                     Text("Type the NAS's hostname to confirm:", style = MaterialTheme.typography.bodyMedium)
                     Text(hostname ?: "?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
-                        value = typed, onValueChange = { typed = it }, singleLine = true,
+                        value = typed, onValueChange = onTyped, singleLine = true,
                         label = { Text("Hostname") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                         modifier = Modifier.fillMaxWidth().testTag(RESTORE_TYPE_TAG),
                     )
                 }
-            }
-        },
-        confirmButton = {
-            DestructiveButton(onClick = { guard.guard("Restore the NAS configuration", onConfirm) }, enabled = ok, modifier = Modifier.testTag(RESTORE_CONFIRM_TAG)) {
-                Text("Restore & reboot", maxLines = 1)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+    }
 }
 
 @Composable

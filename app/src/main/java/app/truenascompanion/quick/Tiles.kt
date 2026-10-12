@@ -51,10 +51,17 @@ object StatusTileText {
  * changes. Tapping it opens the app.
  */
 class StatusTileService : TileService() {
+    companion object { const val STALE_MS = 15 * 60_000L }
+
     override fun onStartListening() {
         super.onStartListening()
         val tile = qsTile ?: return
-        val d = StatusTileText.of(WidgetStore.load(this))
+        val snap = WidgetStore.load(this)
+        // 1.11.0: the tile no longer depends on a placed home-screen widget to stay fresh.
+        if (snap.serverName != null && System.currentTimeMillis() - snap.updatedAt > STALE_MS) {
+            app.truenascompanion.widget.WidgetRefreshWorker.refreshNow(this, force = true)
+        }
+        val d = StatusTileText.of(snap)
         tile.label = d.label
         if (Build.VERSION.SDK_INT >= 29) tile.subtitle = d.subtitle else tile.label = "${d.label}: ${d.subtitle}"
         tile.contentDescription = "${d.label}, ${d.subtitle}"

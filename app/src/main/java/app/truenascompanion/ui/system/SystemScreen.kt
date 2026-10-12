@@ -366,7 +366,11 @@ fun SystemPageScreen(page: SystemPage, onBack: () -> Unit, onEditServer: (String
                 }
                 SystemPage.BACKUP -> item { app.truenascompanion.ui.backup.BackupRestorePage() }
                 SystemPage.ALERTS -> item { app.truenascompanion.ui.notifications.PhoneAlertsSettings(server, say, onRules) }
-                SystemPage.SECURITY -> item { app.truenascompanion.ui.lock.SecuritySettings(say) }
+                SystemPage.SECURITY -> {
+                    item { app.truenascompanion.ui.lock.SecuritySettings(say) }
+                    item { SectionTitle("Automation") }
+                    item { AutomationSection() }
+                }
                 SystemPage.CONNECTION -> {
                     // 1.8.0 (UX review P1-1): one Connection page — addresses, auto-switch, VPN/Tailscale and the retry timeout.
                     val container = (context.applicationContext as app.truenascompanion.TrueNasApp).container

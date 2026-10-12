@@ -45,6 +45,9 @@ object DeepLinkGuard {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    /** 1.11.0: HMAC for other app-made tokens (Tasker plugin bundles), separated from deep links by [purpose]. */
+    fun macFor(context: Context, purpose: String, value: String): String = mac(secret(context), "purpose:$purpose", null, value)
+
     /** Adds the signature to an intent built by the app (call after all extras are set). */
     fun sign(context: Context, intent: Intent): Intent = intent.apply {
         val dest = getStringExtra(DeepLink.EXTRA_DESTINATION) ?: return@apply

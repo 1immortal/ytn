@@ -27,7 +27,8 @@ import java.util.concurrent.TimeUnit
 class WidgetRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         // 1.7.1 (review P1-1): no widget on any home screen, no network work (and no more runs).
-        if (!hasWidgets(applicationContext)) {
+        // 1.11.0: "force" (Quick Settings status tile, automation) refreshes the snapshot even with no widget placed.
+        if (!hasWidgets(applicationContext) && !inputData.getBoolean(KEY_FORCE, false)) {
             sync(applicationContext, placed = false)
             return Result.success()
         }
@@ -147,14 +148,17 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
             }
         }
 
-        /** One refresh soon (deduplicated), only when a widget is placed. */
-        fun refreshNow(context: Context, placed: Boolean = hasWidgets(context)) {
-            if (!placed) return
+        const val KEY_FORCE = "force"
+
+        /** One refresh soon (deduplicated), only when a widget is placed (or [force]: tile, automation). */
+        fun refreshNow(context: Context, placed: Boolean = hasWidgets(context), force: Boolean = false) {
+            if (!placed && !force) return
             runCatching {
                 WorkManager.getInstance(context).enqueueUniqueWork(
                     UNIQUE_NOW, androidx.work.ExistingWorkPolicy.KEEP,
                     OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
                         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                        .setInputData(androidx.work.workDataOf(KEY_FORCE to force))
                         .build(),
                 )
             }

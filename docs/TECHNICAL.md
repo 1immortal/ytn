@@ -11,6 +11,63 @@ The in-depth companion to the [README](../README.md): how each feature works, si
 - **Release asset names stay `truenas-companion-release.apk` and `truenas-companion-debug.apk`** (each with a `.sha256` file). Older updaters look for exactly these names in the latest release; renaming them to `ytn-*.apk` would leave every 1.7.x install stuck. They will keep these names.
 - **Trademark.** YTN is an independent project, not affiliated with or endorsed by iXsystems. TrueNAS is a trademark of iXsystems, Inc.
 
+## What's new in 1.11.0
+
+As before, everything runs over the JSON-RPC 2.0 WebSocket. The only HTTP requests are the middleware's own `/_download` and `/_upload` transfer endpoints, used through `core.download` and the upload pipe, the same way the file browser uses them. Every method, option and field below was checked against the TrueNAS 25.10 middleware source.
+
+- **Configuration backup** (`data/backup/ConfigBackup.kt`, `ConfigBackupRunner.kt`, `ui/backup/`). It lives in System › Backup & restore (Server group) and is also offered as a step before a TrueNAS update. YTN calls `core.download("config.save", [options], filename, buffered=true)` and streams the returned `/_download` URL into a file you choose through the Storage Access Framework. If anything fails, the partial file is deleted.
+  - Without options, 25.10 returns the bare `freenas-v1.db` (saved as `truenas-config-<host>-<date>.db`).
+  - With `secretseed` and/or `root_authorized_keys`, it returns a tar (`.tar`).
+  - The secret-seed switch is on by default, because without the seed a restored NAS can't decrypt stored passwords, cloud credentials or keys. A red warning explains that the file then works like a password.
+  - The phone remembers when it last made a backup for each server. An optional reminder (off, or 7/14/30/60/90 days; 30 by default) is checked by the existing alert check and posted at most once a week. TrueNAS doesn't record downloads, so a backup made from the web UI isn't known to the phone.
+- **Configuration restore.** The method is `config.upload`: FULL_ADMIN, an input pipe, at most 10 MB, a tar (gzip is fine) or a `.db`.
+  - YTN first refuses anything that isn't an SQLite, tar or gzip file, or that is larger than 10 MB.
+  - Then the guard explains what happens, and you type the NAS's hostname to confirm. If *Confirm dangerous actions* is on, your fingerprint is also required.
+  - The upload goes through `/_upload` with a progress bar, then the job is followed for up to 5 minutes. The middleware runs `migrate` on a copy and validates the database **before** it replaces anything; a bad file fails the job and nothing changes. After that, `system.reboot` runs with a 10 s delay.
+  - **Factory reset (`config.reset`) is deliberately not offered.** It wipes the configuration including network settings and admin accounts, so a phone that is usually connected over the network would very likely lose the NAS for good. That is a job for the console or the web UI.
+- **Protection checkup** (`data/checkup/`, `ui/checkup/`). It opens from Storage › Backup, has an opt-in Home card (*Protection checkup*, hidden by default) and a deep link. Every check is read-only, each query is fail-safe (a missing role makes that check "unknown", which isn't counted), and every finding has a fix button that opens the right screen:
+
+  | Check | Data | Weight |
+  |---|---|---|
+  | Every dataset has periodic snapshots (recursive and exclude rules honoured) | `pool.dataset.query`, `pool.snapshottask.query` | 3 |
+  | Snapshots copied off the NAS | `replication.query`, `cloudsync.query`, `rsynctask.query` | 3 |
+  | Snapshot tasks on and working | `pool.snapshottask.query` (`state`) | 2 |
+  | Scrubs within 35 days and scheduled | `pool.query`, `pool.scrub.query` | 2 |
+  | SMART tests scheduled | `cronjob.query` (*S.M.A.R.T. Test* jobs) | 2 |
+  | No SMB guest shares / no NFS open to all | `sharing.smb.query` (`options.guestok`), `sharing.nfs.query` (no networks or hosts) | 2 / 2 |
+  | Certificates not expired or within 30 days of expiry | `certificate.query` | 2 |
+  | No stale API keys | `api_key.query` (`created_at`, `expires_at`, `revoked`). 25.10 has no last-used field, so "stale" means expired, or older than 365 days with no expiry | 1 |
+  | Admins can't use SSH passwords | `ssh.config` (`passwordauth`), `service.query`, `user.query` | 3 |
+  | Two-factor for admins | `auth.twofactor.config` (`enabled`), `user.query`, `auth.me` | 2 |
+  | Up to date | `update.status` | 1 |
+  | Boot pool healthy and under 80 % | `boot.get_state` (a PoolEntry: `healthy`, `status`, `size`, `allocated`) | 3 |
+  | Configuration backed up in the last 30 days | the phone's own record | 2 |
+
+  The score is the weighted share of passes, where a warning counts half. You can *hide* a check (it isn't counted) or mark it *accepted risk* (it counts as a pass and is labelled as such); both are saved per server. The Home card shows the last score from a cached summary, so it costs nothing on refresh.
+- **Settings export and import** (`data/store/SettingsTransfer.kt`). This is a file encrypted with your password.
+  - File format: `"YTNSET" | version 1 | PBKDF2 iterations | 16-byte salt | 12-byte IV | AES-256-GCM`. The key comes from PBKDF2-HMAC-SHA256 with 600,000 iterations, and the header is the GCM associated data.
+  - Files asking for fewer than 100k or more than 5M iterations are refused, and a wrong password and a damaged file look the same.
+  - Contents: servers and addresses, dashboard layouts, alert rules, checkup marks, notification and appearance settings, and the action tile.
+  - **Secrets (API keys, passwords, WireGuard configs) are left out unless you tick the box.** Session tokens, app-lock settings, runtime state and the automation switch are never exported.
+  - Import shows a preview first (servers, which are new, whether secrets are inside), then you choose **Merge** (adds new servers and fills in their settings) or **Replace**.
+- **Compose editor** (`data/apps/ComposeEdit.kt`, `ui/apps/ComposeEditor.kt`). For custom apps only, from the app's menu under *Edit compose (YAML)…*.
+  - The current file comes from `app.query` with `retrieve_config`.
+  - It's checked as you type with snakeyaml-engine 2.10 (a new dependency, its checksums verified against Maven Central): syntax errors with line and column, tabs, multiple documents, a `services:` mapping, and an `image` or `build` for each service.
+  - Saving shows a line diff first, asks for confirmation, then sends `app.update(name, {custom_compose_config_string})` and follows the job.
+- **Unused images** (`data/apps/ImageCleanup.kt`, `ui/apps/ImagesScreen.kt`), from the Apps top bar. 25.10 has no prune call, so the phone compares `app.image.query` with the images in `app.query` → `active_workloads` (normalized: `nginx` = `docker.io/library/nginx:latest`) and deletes the ones you pick with `app.image.delete(id, {force: false})`. Without `force`, Docker refuses to remove an image any container still uses, and that is reported as "in use".
+- **Quick Settings.** The status tile now asks for a refresh (`WidgetRefreshWorker`, with a new *force* flag) when its snapshot is older than 15 minutes, even with no home-screen widget placed.
+- **Automation** (`quick/Automation.kt`, `quick/TaskerEditActivity.kt`). It is off until you turn on System › App lock & privacy › *Allow automation apps*, and it follows the 1.7.1 rule: nothing that changes the NAS runs without your confirmation in YTN.
+  - **Intents** need the dangerous permission `app.truenascompanion.permission.AUTOMATION` (Android asks you before granting it to another app; the debug build uses its own package name):
+
+    | Intent | Type | What it does |
+    |---|---|---|
+    | `app.truenascompanion.action.REFRESH` | broadcast | refreshes the status snapshot |
+    | `app.truenascompanion.action.QUERY_STATUS` | broadcast | replies with `app.truenascompanion.action.STATUS` (only holders of the permission receive it; also the result extras of an ordered broadcast): `server`, `health`, `alerts`, `online`, `error`, `updated_at` |
+    | `app.truenascompanion.action.OPEN`, extra `screen` = dashboard / alerts / storage / apps / tasks / checkup / backup | activity | opens that screen |
+    | `app.truenascompanion.action.QUICK_ACTION`, extra `quick_action` = `scrub_pool` / `restart_app` / `alerts`, optional `target` | activity | opens the action's confirmation (with the app lock) |
+
+  - **Tasker** can't hold custom permissions, so YTN is also a Locale/Tasker plugin (Plugin › YTN). There is an action (refresh, open a screen, quick action) and a condition (healthy / has alerts / offline, from the snapshot). The bundles are created inside YTN and signed with an HMAC key that never leaves the phone (`DeepLinkGuard.macFor`), and unsigned or edited bundles are ignored. Android blocks activity starts from the background, so a plugin's *open screen* or *quick action* posts a notification (channel *Automation*) that you tap.
+
 ## What's new in 1.10.0
 
 Everything below runs on the phone, over the same JSON-RPC 2.0 WebSocket as the rest of the app (no REST). Methods, fields and roles were checked against the TrueNAS 25.10 middleware source.
@@ -528,6 +585,7 @@ DataStore, AndroidX Biometric, [wireguard-android](https://git.zx2c4.com/wiregua
 - The 1.7.1 security and reliability fixes were tested with unit tests (HTTPS-only clients against a local HTTPS test server with a throwaway self-signed certificate, pin rules, the HTTPS migration with fakes, deep-link signatures, lock-screen notification content, no retry after a write was sent), Robolectric Compose tests (overlay hidden from accessibility, scrollable failure card in landscape at 200 % font, labelled delete check boxes) and screenshot previews with example data, including right-to-left layouts. **The HTTPS migration is unverified on a real NAS and phone.** If the connection drops while a long job runs (for example an update or a replication run), the app no longer retries the request; it says the job may still be running on the NAS and asks you to refresh.
 - The 1.8.0 changes were tested (450 unit and Robolectric tests, 700 with the screenshot previews, lint without errors) with unit tests (job merge, retry rule, cancellation, lock integrity with a fake signer, authenticator choice, event-overflow handling against a local WebSocket server), Robolectric Compose tests (discard warnings, headings, merged rows, badges, contrast) and screenshot previews with example data. **Unverified on real phones:** the foreground transfer service on Android 14+ (data-sync time limits), strong-biometric prompts on OEM phones, the Keystore-backed lock integrity after a phone restore, and the themed icon on every launcher.
 - Phone alert rules, live progress, quiet-hour days, the storage runway, longer reports, the ARC card, dashboard density and the new widgets (1.10) were built from the TrueNAS 25.10 middleware source and tested with unit tests (rule state machine, findings per template, quiet-hour days across midnight, runway forecast and pruning, progress mapping and `core.get_jobs` parsing, ARC hit ratio, layout moves), Robolectric tests (channels, rule/recovered/progress notifications and their lock-screen versions, widget snapshot and receivers, the edit grid's accessibility actions) and screenshot previews with example data. **They are unverified on a real NAS and phone.** In particular: Live Update promotion on real Android 16 phones (Android decides whether a notification qualifies), netdata `disktemp` identifiers on every kind of disk, `progress.percent` of real replication and update jobs, home-screen widget sizes on different launchers, and how far back reports go on a NAS with non-default retention.
+- Configuration backup and restore, the protection checkup, settings export/import, the compose editor, image cleanup and automation (1.11) were built from the TrueNAS 25.10 middleware source and tested with unit tests (file naming, reminders, file sniffing, the restore guard, scoring and coverage rules, encryption round trip and tampering, YAML checks and diffs, image matching, intent parsing) and screenshot previews. **They are unverified on a real NAS.** In particular: a restore really reboots the NAS, so test it on a NAS you can reach physically. The phone only knows about backups it made itself. Stale API keys can only be judged by age, because 25.10 doesn't record use. The compose editor reformats the file (comments and key order from the original aren't kept, because TrueNAS stores the compose config as parsed data). The Tasker plugin was tested against the Locale contract, not with Tasker itself.
 - The in-app installer (0.5) was tested with unit tests; the download → verify → system installer flow is **unverified on a real phone**.
 - The shell (0.7) follows TrueNAS 25.10.3 `apps/webshell_app.py` and the web UI's `auth.generate_token` / `/websocket/shell/` calls. Handshake, resize, binary frames and a real pty were tested with unit tests and `tools/webshell_stub.py`. **It has not been tried on a live NAS.** A program path can't take arguments. Incus and classic VMs have no in-app console. If a reverse proxy doesn't forward WebSockets, the shell says so instead of connecting.
 - The VPN features (0.6) were built from the wg-easy 15.4.0 and TrueNAS apps catalog sources and the wireguard-android library. The tunnel itself (bring-up, handshake, split tunnel, reference counting, fallback on a failed handshake) was tested on an Android 14 emulator against a real WireGuard peer (see [Building](BUILDING.md#testing-the-wireguard-tunnel)). **Unverified:** installing wg-easy and Tailscale on a real TrueNAS 25.10, the background tunnel for alert checks on a real Android 14+ phone, real Tailscale detection, and QR scanning on a real camera. If another VPN app takes over while the tunnel is up, the status may only update once a connection fails.

@@ -82,7 +82,7 @@ class V141SystemHubTest {
             HubItem.SERVICES to "services", HubItem.SCHEDULED to "tasks", HubItem.ACCOUNTS to "accounts", HubItem.CERTIFICATES to "certs",
             HubItem.AUDIT to "audit", HubItem.SHELL to "shell", HubItem.REPORTS to "reports", HubItem.ALERTS to "page:ALERTS",
             HubItem.SECURITY to "page:SECURITY", HubItem.CONNECTION to "page:CONNECTION", HubItem.APPEARANCE to "page:APPEARANCE",
-            HubItem.ABOUT to "page:ABOUT", HubItem.NETWORK to "network",
+            HubItem.ABOUT to "page:ABOUT", HubItem.NETWORK to "network", HubItem.BACKUP to "page:BACKUP",
         )
         assertEquals(HubItem.entries.toSet(), expected.keys)
         HubItem.entries.forEach { item ->

@@ -23,6 +23,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- 1.11.0: automation apps must hold this to send YTN intents (Android asks the user before granting it). -->
+    <permission
+        android:name="${applicationId}.permission.AUTOMATION"
+        android:label="@string/automation_permission_label"
+        android:description="@string/automation_permission_description"
+        android:protectionLevel="dangerous" />
+
     <!-- VPN (0.6): to detect and open the Tailscale app (it is never embedded). -->
     <queries>
         <package android:name="com.tailscale.ipn" />
@@ -110,6 +117,58 @@
             android:foregroundServiceType="dataSync" />
 
         <receiver android:name=".notify.AlertActionReceiver" android:exported="false" />
+
+        <!-- 1.11.0: automation (off until enabled in the app; see quick/Automation.kt) -->
+        <receiver
+            android:name=".quick.AutomationReceiver"
+            android:exported="true"
+            android:permission="${applicationId}.permission.AUTOMATION">
+            <intent-filter>
+                <action android:name="${applicationId}.action.REFRESH" />
+                <action android:name="${applicationId}.action.QUERY_STATUS" />
+            </intent-filter>
+        </receiver>
+        <activity
+            android:name=".quick.AutomationActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:permission="${applicationId}.permission.AUTOMATION"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TrueNASCompanion.Translucent">
+            <intent-filter>
+                <action android:name="${applicationId}.action.OPEN" />
+                <action android:name="${applicationId}.action.QUICK_ACTION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <!-- Tasker / Locale plugin: bundles are made and signed inside YTN; unsigned ones are ignored. -->
+        <activity
+            android:name=".quick.TaskerEditActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/automation_plugin_label"
+            android:theme="@style/Theme.TrueNASCompanion.Translucent"
+            tools:ignore="ExportedActivity">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_CONDITION" />
+            </intent-filter>
+        </activity>
+        <receiver
+            android:name=".quick.TaskerFireReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.QUERY_CONDITION" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

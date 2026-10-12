@@ -156,7 +156,7 @@ fun ImagesContent(state: ImagesState, onToggle: (String) -> Unit, onSelectAll: (
                     Spacer(Modifier.width(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
                         DestructiveButton(onClick = onDeleteSelected, enabled = state.selected.isNotEmpty() && !state.deleting, modifier = Modifier.weight(1f).testTag(IMAGES_DELETE_TAG)) {
-                            Text(if (state.selected.isEmpty()) "Remove selected" else "Remove ${state.selected.size} (${Format.bytes(ImageCleanup.total(state.unused.filter { it.id in state.selected }))})", maxLines = 1)
+                            Text(if (state.selected.isEmpty()) "Remove selected" else "Remove ${state.selected.size} selected", maxLines = 1)
                         }
                         OutlinedButton(onClick = onDeleteAll, enabled = !state.deleting) { Text("Remove all") }
                     }

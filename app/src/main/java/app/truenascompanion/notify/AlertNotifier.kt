@@ -77,6 +77,8 @@ class AlertNotifier(private val context: Context) {
         const val CH_TRANSFER = "file_transfers"
         /** 1.10.0: ongoing progress (scrub, resilver, replication, cloud sync, TrueNAS update). */
         const val CH_PROGRESS = "progress"
+        const val CH_AUTOMATION = "automation"
+        const val ID_AUTOMATION = 41
         private const val GROUP_ALERTS = "alerts"
         private const val GROUP_APP = "app"
 
@@ -141,6 +143,7 @@ class AlertNotifier(private val context: Context) {
             ch(CH_PROGRESS, "Progress", NotificationManager.IMPORTANCE_LOW, "Ongoing scrubs, resilvers, replications, cloud syncs and TrueNAS updates", GROUP_ALERTS),
             ch(CH_ACCOUNT, "Sign-in reminders", NotificationManager.IMPORTANCE_DEFAULT, "The saved session expired and alerts are paused", GROUP_APP),
             ch(CH_SERVICE, "Instant alerts connection", NotificationManager.IMPORTANCE_MIN, "Silent notification shown while instant alerts keep a live connection", GROUP_APP),
+            ch(CH_AUTOMATION, "Automation", NotificationManager.IMPORTANCE_HIGH, "Tasker asked to open a screen or a quick action; tap to continue", GROUP_APP),
             ch(CH_TRANSFER, "File transfers", NotificationManager.IMPORTANCE_LOW, "Shown while a file is uploaded to or downloaded from the NAS", GROUP_APP),
         ))
     }
@@ -352,6 +355,22 @@ class AlertNotifier(private val context: Context) {
             .setContentIntent(openAppIntent(server.id, DeepLink.DEST_CERTIFICATE, tag, w.cert.name))
             .build()
         nm.notify(tag, ID_CERT, n)
+    }
+
+    /** 1.11.0: a Tasker plugin asked to open [target] (a screen or a quick action's confirmation). */
+    @SuppressLint("MissingPermission")
+    fun postAutomationPrompt(title: String, target: Intent) {
+        if (!canPost()) return
+        val pi = PendingIntent.getActivity(context, ID_AUTOMATION, target, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = base(CH_AUTOMATION)
+            .setContentTitle(title)
+            .setContentText("Tap to continue in YTN")
+            .setSubText("Automation")
+            .setAutoCancel(true)
+            .setTimeoutAfter(5 * 60_000L)
+            .setContentIntent(pi)
+            .build()
+        nm.notify("automation", ID_AUTOMATION, n)
     }
 
     /** 1.11.0: configuration backup reminder; opens System › Backup & restore. */

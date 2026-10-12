@@ -22,5 +22,8 @@
     <string name="widget_dashboard_description">Alerts, apps and pool usage for your active server</string>
     <string name="widget_actions_label">YTN actions</string>
     <string name="widget_actions_description">Refresh, open alerts and your quick action (restart and scrub still ask in the app)</string>
+    <string name="automation_permission_label">control YTN automation</string>
+    <string name="automation_permission_description">Lets the app refresh YTN\'s NAS status, read it, and open YTN screens or quick-action confirmations. It can\'t change the NAS without your confirmation in YTN.</string>
+    <string name="automation_plugin_label">YTN (TrueNAS)</string>
 </resources>
 
