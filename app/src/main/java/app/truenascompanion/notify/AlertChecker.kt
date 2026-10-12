@@ -195,6 +195,7 @@ class AlertChecker(
         notifier.postAlerts(server, toNotify, byUuid)
         notifier.postCleared(server, result.cleared)
         runCatching { checkCertificates(server, api, prefs, minute, day) }.onFailure { Log.i(TAG, "cert check ${server.name}: ${it.message}") }
+        runCatching { checkBackupReminder(server, prefs, minute, day) }.onFailure { Log.i(TAG, "backup reminder ${server.name}: ${it.message}") }
         // 1.10.0: phone rules, progress and the daily runway sample share one set of lazily loaded data.
         val data = app.truenascompanion.notify.rules.ApiRuleData(api)
         runCatching { evaluateRules(server, data) }.onFailure { Log.i(TAG, "rules ${server.name}: ${it.message}") }
@@ -220,6 +221,17 @@ class AlertChecker(
         val notified = kept + post.associate { it.cert.id.toString() to it.state }
         // Deferred warnings keep the old timestamp so the next check (after quiet hours) posts them.
         settings.saveCertCheck(server.id, CertCheckState(if (deferred.isEmpty()) nowMs else state.lastCheck, notified))
+    }
+
+    /** 1.11.0: optional "back up the configuration" reminder (System › Backup & restore), weekly while overdue. */
+    private suspend fun checkBackupReminder(server: ServerConfig, prefs: NotificationPrefs, minute: Int, day: Int) {
+        val days = settings.backupReminderDays.first()
+        if (days <= 0 || prefs.filter.quietHours.contains(minute, day)) return
+        val now = System.currentTimeMillis()
+        val last = settings.lastConfigBackupOnce(server.id)
+        if (!app.truenascompanion.data.backup.ConfigBackupPolicy.shouldRemind(last, days, settings.backupReminded(server.id), now)) return
+        notifier.postBackupReminder(server, app.truenascompanion.data.backup.ConfigBackupPolicy.reminderText(last, now))
+        settings.setBackupReminded(server.id, now)
     }
 
     // --- 1.10.0: phone alert rules ---

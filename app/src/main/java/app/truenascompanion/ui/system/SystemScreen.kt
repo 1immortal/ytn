@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import androidx.compose.foundation.layout.Box
@@ -154,7 +155,14 @@ class SystemHubViewModel(private val c: AppContainer) : ViewModel() {
         c.settings.appearance,
     ) { n, p, l, g, a -> Local(n, p, l, g, a) }
 
-    val summary: StateFlow<HubSummary> = combine(local, remote, c.repository.state, c.repository.activeServer, c.updates.latest) { l, r, conn, server, appUpdate ->
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val lastBackup = c.repository.activeServer.flatMapLatest { srv -> srv?.let { c.settings.lastConfigBackup(it.id) } ?: kotlinx.coroutines.flow.flowOf(null) }
+
+    val summary: StateFlow<HubSummary> = combine(baseSummary(), lastBackup) { s, last ->
+        s.copy(backupDays = app.truenascompanion.data.backup.ConfigBackupPolicy.daysSince(last, System.currentTimeMillis()))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HubSummary())
+
+    private fun baseSummary() = combine(local, remote, c.repository.state, c.repository.activeServer, c.updates.latest) { l, r, conn, server, appUpdate ->
         val now = System.currentTimeMillis()
         val warn = l.prefs?.certWarnDays ?: 14
         val statuses = r.certs?.map { it.status(now, warn) }
@@ -184,7 +192,7 @@ class SystemHubViewModel(private val c: AppContainer) : ViewModel() {
             appVersion = appVersion,
             appUpdate = appUpdate,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HubSummary())
+    }
 
     val header: StateFlow<HubHeader> = combine(c.repository.activeServer, c.repository.state, remote) { s, conn, r ->
         val info = r.info ?: (conn as? ConnectionState.Connected)?.info
@@ -356,6 +364,7 @@ fun SystemPageScreen(page: SystemPage, onBack: () -> Unit, onEditServer: (String
                         onReboot = { confirm = "reboot" }, onShutdown = { confirm = "shutdown" },
                     )
                 }
+                SystemPage.BACKUP -> item { app.truenascompanion.ui.backup.BackupRestorePage() }
                 SystemPage.ALERTS -> item { app.truenascompanion.ui.notifications.PhoneAlertsSettings(server, say, onRules) }
                 SystemPage.SECURITY -> item { app.truenascompanion.ui.lock.SecuritySettings(say) }
                 SystemPage.CONNECTION -> {

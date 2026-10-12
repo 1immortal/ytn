@@ -31,7 +31,7 @@ private sealed interface PDialog {
 
 /** The Protection tab of Storage: state, dialogs and polling around [ProtectionContent]. */
 @Composable
-fun ProtectionTab(data: ProtectionData, vm: ProtectionViewModel, onAddTask: () -> Unit, onEditTask: (Int) -> Unit, onCloudSync: () -> Unit = {}, onReplication: () -> Unit = {}) {
+fun ProtectionTab(data: ProtectionData, vm: ProtectionViewModel, onAddTask: () -> Unit, onEditTask: (Int) -> Unit, onCloudSync: () -> Unit = {}, onReplication: () -> Unit = {}, onCheckup: () -> Unit = {}) {
     val busy by vm.busy.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<PDialog?>(null) }
     val running = data.anythingRunning
@@ -64,7 +64,11 @@ fun ProtectionTab(data: ProtectionData, vm: ProtectionViewModel, onAddTask: () -
             override fun openReplication() = onReplication()
         }
     }
-    ProtectionContent(data, busy, actions)
+    // 1.11.0: protection checkup entry (last score from this phone).
+    val container = (androidx.compose.ui.platform.LocalContext.current.applicationContext as app.truenascompanion.TrueNasApp).container
+    val server by container.repository.activeServer.collectAsStateWithLifecycle()
+    val checkup by remember(server?.id) { server?.id?.let { container.settings.checkupSummary(it) } ?: kotlinx.coroutines.flow.flowOf(null) }.collectAsStateWithLifecycle(initialValue = null)
+    ProtectionContent(data, busy, actions, header = { app.truenascompanion.ui.checkup.CheckupEntryCard(checkup, onCheckup) })
 
     val close = { dialog = null }
     when (val d = dialog) {

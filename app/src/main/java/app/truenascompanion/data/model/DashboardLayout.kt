@@ -23,6 +23,12 @@ enum class WidgetType(val title: String, val defaultSize: WidgetSize, val shortT
     RUNWAY("Storage runway", WidgetSize.FULL, "Runway"),
     /** 1.10.0: ZFS cache size and hit ratio (live). */
     ARC("ZFS cache (ARC)", WidgetSize.HALF, "ARC"),
+    /** 1.11.0: last protection checkup score (opt-in: hidden until the user turns it on). */
+    CHECKUP("Protection checkup", WidgetSize.HALF, "Checkup"),
+    ;
+
+    /** Added after the first release of the dashboard and not shown until the user picks it. */
+    val optIn: Boolean get() = this == CHECKUP
 }
 
 /** 1.10.0: card spacing and padding on the dashboard. */
@@ -45,7 +51,7 @@ data class DashboardLayout(val widgets: List<WidgetConfig>, val density: Dashboa
     fun normalized(): DashboardLayout {
         val seen = LinkedHashMap<WidgetType, WidgetConfig>()
         widgets.forEach { if (it.type !in seen) seen[it.type] = it }
-        WidgetType.entries.forEach { if (it !in seen) seen[it] = WidgetConfig(it) }
+        WidgetType.entries.forEach { if (it !in seen) seen[it] = WidgetConfig(it, visible = !it.optIn) }
         return DashboardLayout(seen.values.toList(), density)
     }
 
@@ -68,6 +74,6 @@ data class DashboardLayout(val widgets: List<WidgetConfig>, val density: Dashboa
     val visibleWidgets: List<WidgetConfig> get() = widgets.filter { it.visible }
 
     companion object {
-        val DEFAULT = DashboardLayout(WidgetType.entries.map { WidgetConfig(it) })
+        val DEFAULT = DashboardLayout(WidgetType.entries.map { WidgetConfig(it, visible = !it.optIn) })
     }
 }

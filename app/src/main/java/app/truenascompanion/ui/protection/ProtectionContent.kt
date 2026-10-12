@@ -141,9 +141,10 @@ private fun ProtectionRow(icon: ImageVector, item: ProtectionItem, compact: Bool
 }
 
 @Composable
-fun ProtectionContent(data: ProtectionData, busy: Set<String>, actions: ProtectionActions, modifier: Modifier = Modifier) {
+fun ProtectionContent(data: ProtectionData, busy: Set<String>, actions: ProtectionActions, modifier: Modifier = Modifier, header: (@Composable () -> Unit)? = null) {
     val scrubTasks = data.scrubTasks.orEmpty()
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        header?.let { h -> item(key = "header") { h() } }
         item { ElevatedSection { ProtectionRows(data.summary) } }
 
         item { SectionTitle("Scrubs") }

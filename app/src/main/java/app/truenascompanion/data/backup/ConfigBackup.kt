@@ -70,6 +70,18 @@ object ConfigBackupPolicy {
     fun reminderDue(lastMillis: Long?, days: Int, now: Long): Boolean =
         days > 0 && (lastMillis == null || now - lastMillis > days * DAY_MS)
 
+    /** Remind at most once a week while the backup is overdue. */
+    const val REMIND_EVERY_MS = 7 * DAY_MS
+
+    fun shouldRemind(lastMillis: Long?, days: Int, remindedMillis: Long?, now: Long): Boolean =
+        reminderDue(lastMillis, days, now) && (remindedMillis == null || now - remindedMillis >= REMIND_EVERY_MS ||
+            (lastMillis != null && remindedMillis < lastMillis))
+
+    fun reminderText(lastMillis: Long?, now: Long): String = when (val d = daysSince(lastMillis, now)) {
+        null -> "No configuration backup from this phone yet. Save one in a minute from Backup & restore."
+        else -> "The last configuration backup from this phone is $d days old."
+    }
+
     fun daysSince(lastMillis: Long?, now: Long): Int? = lastMillis?.let { ((now - it).coerceAtLeast(0) / DAY_MS).toInt() }
 
     fun lastBackupText(lastMillis: Long?, now: Long): String = when (val d = daysSince(lastMillis, now)) {

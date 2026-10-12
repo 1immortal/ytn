@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Notes
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Terminal
@@ -153,6 +154,7 @@ class AppDetailViewModel(private val c: AppContainer, val name: String) : ViewMo
 fun AppDetailScreen(
     name: String, onBack: () -> Unit, onEdit: () -> Unit, onLogs: (String?) -> Unit, onFinished: (String) -> Unit,
     onShell: (containerId: String, containerName: String, command: String) -> Unit = { _, _, _ -> },
+    onEditCompose: () -> Unit = {},
 ) {
     val vm = appViewModel(key = "app-$name") { AppDetailViewModel(it, name) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -177,6 +179,8 @@ fun AppDetailScreen(
                     if (app != null) Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (app.customApp) DropdownMenuItem(text = { Text("Edit compose (YAML)…") }, leadingIcon = { Icon(Icons.Rounded.Code, null) },
+                                onClick = { menu = false; onEditCompose() })
                             if (!app.customApp) DropdownMenuItem(text = { Text("Roll back…") }, leadingIcon = { Icon(Icons.Rounded.History, null) },
                                 onClick = { menu = false; vm.loadRollbackVersions() })
                             DropdownMenuItem(text = { Text("Delete…", color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error) },

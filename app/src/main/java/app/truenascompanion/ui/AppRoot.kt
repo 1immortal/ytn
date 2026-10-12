@@ -140,6 +140,11 @@ private object Routes {
     const val SSH_CONN = "ssh_connection?id={id}"
     const val SSH_KEY = "ssh_keypair?id={id}"
     const val ISCSI = "iscsi"
+    // 1.11.0
+    const val CHECKUP = "checkup"
+    const val COMPOSE_EDIT = "app/{name}/compose"
+    const val IMAGES = "app_images"
+    fun composeEdit(name: String) = "app/${enc(name)}/compose"
     const val ISCSI_EDIT = "iscsi_edit/{kind}?id={id}"
     const val ISCSI_SETTINGS = "iscsi_settings"
     const val ISCSI_WIZARD = "iscsi_wizard"
@@ -232,6 +237,8 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
             }
             DeepLink.DEST_RULES -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.ALERT_RULES) }
             DeepLink.DEST_TASKS -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.JOBS) }
+            DeepLink.DEST_BACKUP -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.BACKUP)) }
+            DeepLink.DEST_CHECKUP -> { container.storageTabRequest.value = app.truenascompanion.ui.storage.StorageTabs.PROTECTION; nav.switchTab(Tab.STORAGE.route); nav.navigate(Routes.CHECKUP) }
             DeepLink.DEST_SHELL, DeepLink.DEST_RESTART_APP, DeepLink.DEST_SCRUB_POOL ->
                 app.truenascompanion.quick.QuickAction.byDestination(link.destination)?.let { quick = app.truenascompanion.ui.quick.QuickRequest(it, link.arg) }
             else -> nav.openTarget(container, app.truenascompanion.notify.AlertTarget.decode(link.destination, link.arg))
@@ -284,6 +291,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                                 WidgetType.ALERTS -> nav.switchTab(Tab.ALERTS.route)
                                 WidgetType.PROTECTION -> { container.storageTabRequest.value = app.truenascompanion.ui.storage.StorageTabs.PROTECTION; nav.switchTab(Tab.STORAGE.route) }
                                 WidgetType.REPORTS, WidgetType.CPU, WidgetType.MEMORY, WidgetType.NETWORK, WidgetType.ARC -> nav.navigate(Routes.REPORTS)
+                                WidgetType.CHECKUP -> nav.navigate(Routes.CHECKUP)
                                 else -> Unit
                             }
                         },
@@ -304,6 +312,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                         onIscsi = { nav.navigate(Routes.ISCSI) },
                         onIscsiWizard = { nav.navigate(Routes.ISCSI_WIZARD) },
                         onServices = { nav.navigate(Routes.SERVICES) },
+                        onCheckup = { nav.navigate(Routes.CHECKUP) },
                     )
                 }
                 pushed(Routes.ISCSI) { _ ->
@@ -415,7 +424,15 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                         onOpenVm = { nav.navigate("vm/$it") },
                         onCreateVm = { nav.navigate(Routes.VM_NEW) },
                         onShell = { nav.navigate(Routes.shell(it)) },
+                        onImages = { nav.navigate(Routes.IMAGES) },
                     )
+                }
+                pushed(Routes.IMAGES) { app.truenascompanion.ui.apps.ImagesScreen(onBack = { nav.popBackStack() }) }
+                pushed(Routes.COMPOSE_EDIT, "name") { a ->
+                    app.truenascompanion.ui.apps.ComposeEditorScreen(a.getValue("name"), onBack = { nav.popBackStack() })
+                }
+                pushed(Routes.CHECKUP) {
+                    app.truenascompanion.ui.checkup.CheckupScreen(onBack = { nav.popBackStack() }, onFix = { fix -> nav.openFix(container, fix) })
                 }
                 pushed(Routes.VPN, "id") { a ->
                     app.truenascompanion.ui.vpn.VpnScreen(a.getValue("id"), onBack = { nav.popBackStack() }, onSetup = { nav.navigate(Routes.vpnSetup(a.getValue("id"))) })
@@ -446,7 +463,8 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                     val name = a.getValue("name")
                     AppDetailScreen(name, onBack = { nav.popBackStack() }, onEdit = { nav.navigate(Routes.appEdit(name)) },
                         onLogs = { nav.navigate(Routes.logs(name, it)) }, onFinished = { nav.backToApps() },
-                        onShell = { id, cname, cmd -> nav.navigate(Routes.shell(app.truenascompanion.data.shell.ShellTarget.App(name, id, cname, cmd))) })
+                        onShell = { id, cname, cmd -> nav.navigate(Routes.shell(app.truenascompanion.data.shell.ShellTarget.App(name, id, cname, cmd))) },
+                        onEditCompose = { nav.navigate(Routes.composeEdit(name)) })
                 }
                 pushed(Routes.APP_EDIT, "name") { a ->
                     AppFormScreen(AppFormMode.Edit(a.getValue("name")), onBack = { nav.popBackStack() }, onDone = { nav.backToApps() })
@@ -602,6 +620,29 @@ private fun NavHostController.openTarget(container: app.truenascompanion.AppCont
             container.storageTabRequest.value = app.truenascompanion.ui.storage.StorageTabs.PROTECTION; switchTab(Tab.STORAGE.route); navigate(Routes.REPLICATION)
         }
         app.truenascompanion.notify.AlertTarget.Alerts -> switchTab(Tab.ALERTS.route)
+    }
+}
+
+/** 1.11.0: where a protection checkup "Fix" button goes. Opening a screen only; nothing changes by itself. */
+private fun NavHostController.openFix(container: app.truenascompanion.AppContainer, fix: app.truenascompanion.data.checkup.CheckFix) {
+    fun storage(pane: Int) { container.storageTabRequest.value = pane; switchTab(Tab.STORAGE.route) }
+    when (fix) {
+        app.truenascompanion.data.checkup.CheckFix.SNAPSHOT_TASKS, app.truenascompanion.data.checkup.CheckFix.SCRUBS,
+        app.truenascompanion.data.checkup.CheckFix.SMART -> storage(app.truenascompanion.ui.storage.StorageTabs.PROTECTION)
+        app.truenascompanion.data.checkup.CheckFix.REPLICATION -> { storage(app.truenascompanion.ui.storage.StorageTabs.PROTECTION); navigate(Routes.REPLICATION) }
+        app.truenascompanion.data.checkup.CheckFix.SHARES -> storage(app.truenascompanion.ui.storage.StorageTabs.SHARES)
+        app.truenascompanion.data.checkup.CheckFix.CERTIFICATES -> { switchTab(Tab.SYSTEM.route); navigate(Routes.certificates()) }
+        app.truenascompanion.data.checkup.CheckFix.SSH -> { switchTab(Tab.SYSTEM.route); navigate(Routes.service(app.truenascompanion.data.services.ServiceKind.SSH)) }
+        app.truenascompanion.data.checkup.CheckFix.ACCOUNTS -> { switchTab(Tab.SYSTEM.route); navigate(Routes.ACCOUNTS) }
+        app.truenascompanion.data.checkup.CheckFix.UPDATES, app.truenascompanion.data.checkup.CheckFix.BOOT ->
+            { switchTab(Tab.SYSTEM.route); navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.UPDATES)) }
+        app.truenascompanion.data.checkup.CheckFix.CONFIG_BACKUP -> { switchTab(Tab.SYSTEM.route); navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.BACKUP)) }
+        app.truenascompanion.data.checkup.CheckFix.API_KEYS, app.truenascompanion.data.checkup.CheckFix.TWO_FACTOR -> {
+            // API keys and two-factor settings aren't in YTN: open the NAS's web UI (same as System › About › Open web UI).
+            container.repository.activeServer.value?.let { s ->
+                runCatching { container.context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(s.url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+        }
     }
 }
 

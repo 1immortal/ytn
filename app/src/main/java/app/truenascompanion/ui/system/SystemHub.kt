@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material.icons.rounded.SettingsEthernet
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
@@ -72,6 +73,7 @@ import app.truenascompanion.util.Format
 enum class HubItem(val title: String, val keywords: String) {
     UPDATES("Updates", "truenas update upgrade version release notes boot environments boot pool activate clone train"),
     POWER("Power", "reboot restart shutdown shut down power off turn off"),
+    BACKUP("Backup & restore", "config configuration backup restore save upload secret seed export import settings move phone migrate"),
     TASKS("Running jobs", "tasks jobs running progress activity"),
     ALL_SERVERS("All servers", "servers overview saved nas switch status alerts multiple"),
     NETWORK("Network", "network interfaces ip address gateway dns name server nameserver hostname domain routes static vlan bridge lag bond aggregation mtu dhcp mac ipmi proxy"),
@@ -92,6 +94,7 @@ enum class HubItem(val title: String, val keywords: String) {
     val icon: ImageVector get() = when (this) {
         UPDATES -> Icons.Rounded.SystemUpdateAlt
         POWER -> Icons.Rounded.PowerSettingsNew
+        BACKUP -> Icons.Rounded.SettingsBackupRestore
         TASKS -> Icons.AutoMirrored.Rounded.ListAlt
         ALL_SERVERS -> Icons.Rounded.Storage
         NETWORK -> Icons.Rounded.Lan
@@ -113,6 +116,7 @@ enum class HubItem(val title: String, val keywords: String) {
     val page: SystemPage? get() = when (this) {
         UPDATES -> SystemPage.UPDATES
         POWER -> SystemPage.POWER
+        BACKUP -> SystemPage.BACKUP
         ALERTS -> SystemPage.ALERTS
         SECURITY -> SystemPage.SECURITY
         CONNECTION -> SystemPage.CONNECTION
@@ -162,7 +166,7 @@ fun HubItem.open(a: HubActions) {
 }
 
 enum class HubGroup(val title: String, val items: List<HubItem>) {
-    SERVER("Server", listOf(HubItem.UPDATES, HubItem.POWER, HubItem.NETWORK, HubItem.TASKS, HubItem.ALL_SERVERS)),
+    SERVER("Server", listOf(HubItem.UPDATES, HubItem.BACKUP, HubItem.POWER, HubItem.NETWORK, HubItem.TASKS, HubItem.ALL_SERVERS)),
     SERVICES("Services & tasks", listOf(HubItem.SERVICES, HubItem.SCHEDULED)),
     SECURITY("Security & access", listOf(HubItem.ACCOUNTS, HubItem.CERTIFICATES, HubItem.AUDIT, HubItem.SHELL)),
     MONITORING("Monitoring", listOf(HubItem.REPORTS, HubItem.ALERTS)),
@@ -173,6 +177,7 @@ enum class HubGroup(val title: String, val items: List<HubItem>) {
 enum class SystemPage(val title: String) {
     UPDATES("Updates"),
     POWER("Power"),
+    BACKUP("Backup & restore"),
     ALERTS("Phone alerts"),
     SECURITY("App lock & privacy"),
     CONNECTION("Connection"),
@@ -227,6 +232,8 @@ data class HubSummary(
     val appVersion: String = "",
     val appUpdate: UpdateResult? = null,
     val alertsIntervalMinutes: Int = 15,
+    /** 1.11.0: days since this phone's last config backup of the active server (null = never). */
+    val backupDays: Int? = null,
 ) {
     enum class AlertsMode { OFF, INSTANT, PERIODIC, NO_SERVER }
 }
@@ -247,6 +254,10 @@ fun hubSubtitles(s: HubSummary): Map<HubItem, HubSubtitle> = HubItem.entries.ass
             }
         }
         HubItem.POWER -> HubSubtitle("Reboot, turn off")
+        HubItem.BACKUP -> when (val d = s.backupDays) {
+            null -> HubSubtitle(if (s.connected) "No backup yet" else "Config & app settings", attention = s.connected)
+            else -> HubSubtitle(if (d == 0) "Backed up today" else "Backed up $d d ago", attention = d > 30)
+        }
         HubItem.TASKS -> s.runningJobs?.let { HubSubtitle(if (it == 0) "Nothing running" else "$it running") } ?: HubSubtitle("Jobs & progress")
         HubItem.ALL_SERVERS -> HubSubtitle(if (s.serverCount > 0) "${s.serverCount} saved" else "Every saved NAS")
         HubItem.NETWORK -> HubSubtitle("View only")

@@ -54,6 +54,8 @@ data class DashboardData(
     val protection: app.truenascompanion.data.protection.ProtectionSummary? = null,
     /** 1.10.0: storage runway per pool (null until loaded). */
     val runway: List<PoolRunway>? = null,
+    /** 1.11.0: last protection checkup (from this phone). */
+    val checkup: app.truenascompanion.data.checkup.CheckupSummary? = null,
 )
 
 /** One pool's runway: the forecast and its recent used-fraction samples (sparkline). */
@@ -99,6 +101,10 @@ class DashboardViewModel(private val c: AppContainer) : ViewModel() {
 
     private val _data = MutableStateFlow(DashboardData())
     val data: StateFlow<DashboardData> = _data.asStateFlow()
+    /** 1.11.0: last checkup score for the opt-in Home card. */
+    val checkup: StateFlow<app.truenascompanion.data.checkup.CheckupSummary?> = server.filterNotNull().map { it.id }.distinctUntilChanged()
+        .flatMapLatest { c.settings.checkupSummary(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val savedLayout: StateFlow<DashboardLayout> = server.filterNotNull().map { it.id }.distinctUntilChanged()
         .flatMapLatest { c.settings.dashboardLayout(it) }

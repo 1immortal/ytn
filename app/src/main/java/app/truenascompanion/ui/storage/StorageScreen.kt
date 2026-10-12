@@ -211,6 +211,7 @@ fun StorageScreen(
     onIscsi: () -> Unit = {},
     onIscsiWizard: () -> Unit = {},
     onServices: () -> Unit = {},
+    onCheckup: () -> Unit = {},
 ) {
     val vm = appViewModel { StorageViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -229,7 +230,7 @@ fun StorageScreen(
         Column(Modifier.padding(padding).fillMaxSize()) {
             StorageHeader(tab) { tab = it }
             if (tab == StorageTabs.PROTECTION) {
-                ProtectionPane(snackbar, onSnapshotTask, onCloudSync, onReplication)
+                ProtectionPane(snackbar, onSnapshotTask, onCloudSync, onReplication, onCheckup)
                 return@Column
             }
             PullToRefreshBox(isRefreshing = refreshing, onRefresh = { vm.refresh() }, modifier = Modifier.fillMaxSize()) {
@@ -272,7 +273,7 @@ fun StorageScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProtectionPane(snackbar: SnackbarHostState, onSnapshotTask: (Int?) -> Unit, onCloudSync: () -> Unit, onReplication: () -> Unit) {
+private fun ProtectionPane(snackbar: SnackbarHostState, onSnapshotTask: (Int?) -> Unit, onCloudSync: () -> Unit, onReplication: () -> Unit, onCheckup: () -> Unit = {}) {
     val vm = appViewModel { ProtectionViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
@@ -285,7 +286,7 @@ private fun ProtectionPane(snackbar: SnackbarHostState, onSnapshotTask: (Int?) -
     }
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { vm.refresh() }, modifier = Modifier.fillMaxSize()) {
         StateContent(state, onRetry = { vm.refresh() }, skeletonCount = 4, skeletonHeight = 110.dp) { data ->
-                ProtectionTab(data, vm, onAddTask = { onSnapshotTask(null) }, onEditTask = { onSnapshotTask(it) }, onCloudSync = onCloudSync, onReplication = onReplication)
+                ProtectionTab(data, vm, onAddTask = { onSnapshotTask(null) }, onEditTask = { onSnapshotTask(it) }, onCloudSync = onCloudSync, onReplication = onReplication, onCheckup = onCheckup)
         }
     }
 }

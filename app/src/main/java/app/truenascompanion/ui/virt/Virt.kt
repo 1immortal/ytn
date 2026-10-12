@@ -289,11 +289,12 @@ fun WorkloadsScreen(
     onJobs: () -> Unit, onCatalog: () -> Unit, onOpenApp: (String) -> Unit,
     onOpenVm: (Int) -> Unit, onCreateVm: () -> Unit,
     onShell: (app.truenascompanion.data.shell.ShellTarget) -> Unit = {},
+    onImages: () -> Unit = {},
 ) {
     var workload by rememberSaveable { mutableStateOf(Workload.APPS) }
     val header: @Composable () -> Unit = { WorkloadSwitcher(workload, { workload = it }) }
     when (workload) {
-        Workload.APPS -> AppsScreen(onJobs = onJobs, onCatalog = onCatalog, onOpenApp = onOpenApp, header = header)
+        Workload.APPS -> AppsScreen(onJobs = onJobs, onCatalog = onCatalog, onOpenApp = onOpenApp, header = header, onImages = onImages)
         else -> VirtScreen(workload, header, onJobs, onOpenVm, onCreateVm, onShell)
     }
 }

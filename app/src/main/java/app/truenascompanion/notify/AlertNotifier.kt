@@ -52,6 +52,9 @@ object DeepLink {
     // 1.10.0: phone alert rules editor, Updates page and Running jobs
     const val DEST_RULES = "alert_rules"
     const val DEST_TASKS = "tasks"
+    /** 1.11.0: System › Backup & restore, and the protection checkup. */
+    const val DEST_BACKUP = "config_backup"
+    const val DEST_CHECKUP = "checkup"
 }
 
 /** Builds and posts all app notifications (alerts, sign-in reminder, test, instant-mode service). */
@@ -347,6 +350,22 @@ class AlertNotifier(private val context: Context) {
             .setSubText("${server.name} · Certificates")
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(openAppIntent(server.id, DeepLink.DEST_CERTIFICATE, tag, w.cert.name))
+            .build()
+        nm.notify(tag, ID_CERT, n)
+    }
+
+    /** 1.11.0: configuration backup reminder; opens System › Backup & restore. */
+    @SuppressLint("MissingPermission")
+    fun postBackupReminder(server: ServerConfig, text: String) {
+        if (!canPost()) return
+        val tag = "backup/${server.id}"
+        val n = base(CH_INFO)
+            .setContentTitle("Back up ${server.name}'s configuration")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setSubText("${server.name} · Backup")
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(openAppIntent(server.id, DeepLink.DEST_BACKUP, tag))
             .build()
         nm.notify(tag, ID_CERT, n)
     }

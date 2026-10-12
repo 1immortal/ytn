@@ -48,6 +48,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -331,7 +332,7 @@ fun AppState.health(): Health = when (this) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppsScreen(onJobs: () -> Unit = {}, onCatalog: () -> Unit = {}, onOpenApp: (String) -> Unit = {}, header: @Composable () -> Unit = {}) {
+fun AppsScreen(onJobs: () -> Unit = {}, onCatalog: () -> Unit = {}, onOpenApp: (String) -> Unit = {}, header: @Composable () -> Unit = {}, onImages: () -> Unit = {}) {
     val vm = appViewModel { AppsViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
@@ -357,6 +358,8 @@ fun AppsScreen(onJobs: () -> Unit = {}, onCatalog: () -> Unit = {}, onOpenApp: (
                 title = { Text("Apps") },
                 actions = {
                     IconButton(onClick = onCatalog) { Icon(Icons.Rounded.AddCircleOutline, "Install apps from the catalog") }
+                    // 1.11.0: unused Docker images.
+                    IconButton(onClick = onImages) { Icon(Icons.Rounded.DeleteSweep, "Unused images") }
                     IconButton(onClick = { vm.checkForUpdates() }, enabled = !syncing) {
                         if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         else Icon(Icons.Rounded.Refresh, "Check for app updates")

@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.HourglassBottom
 import androidx.compose.material.icons.rounded.Cached
@@ -100,6 +101,7 @@ fun WidgetType.icon(): ImageVector = when (this) {
     WidgetType.REPORTS -> Icons.Rounded.Insights
     WidgetType.RUNWAY -> Icons.Rounded.HourglassBottom
     WidgetType.ARC -> Icons.Rounded.Cached
+    WidgetType.CHECKUP -> Icons.Rounded.HealthAndSafety
 }
 
 fun tempHealth(c: Double?): Health = when {
@@ -213,6 +215,7 @@ fun DashboardWidget(
             WidgetType.REPORTS -> ReportsWidget(full, live)
             WidgetType.RUNWAY -> RunwayWidget(full, data)
             WidgetType.ARC -> ArcWidget(full, live, data, flavor)
+            WidgetType.CHECKUP -> CheckupWidget(full, data)
         }
     }
 }
@@ -546,6 +549,19 @@ private fun ProtectionWidget(full: Boolean, d: DashboardData) {
                 app.truenascompanion.data.protection.ProtectionStatus.OK -> "All good"
             })
         }
+    }
+}
+
+@Composable
+private fun CheckupWidget(full: Boolean, d: DashboardData) {
+    WidgetHeader(WidgetType.CHECKUP, full)
+    Spacer(Modifier.height(12.dp))
+    val s = d.checkup
+    if (s == null) { BigValue("–"); Muted("Tap to run a checkup") }
+    else {
+        val health = when { s.score >= 90 -> Health.HEALTHY; s.score >= 60 -> Health.WARNING; else -> Health.CRITICAL }
+        BigValue("${s.score}", color = LocalStatusColors.current.of(health))
+        Muted(if (s.issues == 0) "Nothing to fix" else "${s.issues} to look at")
     }
 }
 

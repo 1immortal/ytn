@@ -103,7 +103,9 @@ fun DashboardScreen(onOpen: (WidgetType) -> Unit, onServers: () -> Unit, onConne
     val server by vm.server.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val route by vm.route.collectAsStateWithLifecycle()
-    val data by vm.data.collectAsStateWithLifecycle()
+    val rawData by vm.data.collectAsStateWithLifecycle()
+    val checkup by vm.checkup.collectAsStateWithLifecycle()
+    val data = remember(rawData, checkup) { rawData.copy(checkup = checkup) }
     val live by vm.live.collectAsStateWithLifecycle()
     val layout by vm.layout.collectAsStateWithLifecycle()
     val editing by vm.editing.collectAsStateWithLifecycle()
@@ -277,7 +279,7 @@ internal fun WidgetGrid(
         items(widgets, key = { it.type.name }, span = { GridItemSpan(if (it.size == WidgetSize.FULL) 2 else 1) }) { w ->
             val target: (() -> Unit)? = when (w.type) {
                 WidgetType.POOLS, WidgetType.APPS, WidgetType.ALERTS, WidgetType.TEMPERATURE, WidgetType.PROTECTION,
-                WidgetType.REPORTS, WidgetType.CPU, WidgetType.MEMORY, WidgetType.NETWORK, WidgetType.RUNWAY, WidgetType.ARC -> ({ onOpen(w.type) })
+                WidgetType.REPORTS, WidgetType.CPU, WidgetType.MEMORY, WidgetType.NETWORK, WidgetType.RUNWAY, WidgetType.ARC, WidgetType.CHECKUP -> ({ onOpen(w.type) })
                 else -> null
             }
             DashboardWidget(
