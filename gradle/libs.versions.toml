@@ -23,10 +23,12 @@ roborazzi = "1.75.0"
 wireguard = "1.0.20260102"
 camera = "1.5.1"
 zxing = "3.5.4"
+snakeyamlEngine = "2.10"
 testRunner = "1.7.0"
 testExtJunit = "1.3.0"
 
 [libraries]
+snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyamlEngine" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }

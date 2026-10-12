@@ -92,8 +92,16 @@ class FileTransfers(client: OkHttpClient, baseUrl: String) {
      * arrives (`filesystem.put` opens the target for writing before the data is complete) and has no API to delete
      * files, so cancelling or losing the connection after that point leaves a partial file on the NAS.
      */
-    suspend fun upload(path: String, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Long {
-        val request = uploadRequest(path, token, fileName, size, open, onProgress)
+    suspend fun upload(path: String, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Long =
+        uploadJob(uploadRequest(path, token, fileName, size, open, onProgress))
+
+    /**
+     * 1.11.0: any `/_upload` job method with an input pipe (e.g. `config.upload` with `params = []`). Returns the job id.
+     */
+    suspend fun uploadTo(method: String, params: JsonArray, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Long =
+        uploadJob(methodUploadRequest(method, params, token, fileName, size, open, onProgress))
+
+    private suspend fun uploadJob(request: Request): Long {
         return http.newCall(request).executeCancellable { response ->
             if (!response.isSuccessful) throw httpError(response)
             val text = response.body.string()
@@ -102,10 +110,16 @@ class FileTransfers(client: OkHttpClient, baseUrl: String) {
         }
     }
 
-    internal fun uploadRequest(path: String, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Request {
+    internal fun uploadRequest(path: String, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Request =
+        methodUploadRequest(
+            "filesystem.put", JsonArray(listOf(JsonPrimitive(path), buildJsonObject { put("append", false); put("mode", JsonNull) })),
+            token, fileName, size, open, onProgress,
+        )
+
+    internal fun methodUploadRequest(method: String, params: JsonArray, token: String, fileName: String, size: Long, open: () -> InputStream, onProgress: (Long, Long) -> Unit): Request {
         val data = buildJsonObject {
-            put("method", "filesystem.put")
-            put("params", JsonArray(listOf(JsonPrimitive(path), buildJsonObject { put("append", false); put("mode", JsonNull) })))
+            put("method", method)
+            put("params", params)
         }.toString()
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("data", data)

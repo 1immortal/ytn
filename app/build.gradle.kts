@@ -16,8 +16,8 @@ android {
         applicationId = "app.truenascompanion"
         minSdk = 26
         targetSdk = 37
-        versionCode = 30
-        versionName = "1.10.0"
+        versionCode = 31
+        versionName = "1.11.0"
         // Public GitHub repository whose Releases the in-app update check reads (override: -PupdateRepo=owner/name).
         // 64/32-bit ARM phones plus x86_64 emulators (the WireGuard Go library is ~3.5 MB per ABI).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -124,6 +124,8 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.zxing.core)
+    // 1.11.0: YAML check and formatting for the custom-app compose editor (pure Java, no dependencies).
+    implementation(libs.snakeyaml.engine)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

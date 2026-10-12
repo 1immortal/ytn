@@ -120,6 +120,13 @@ class SettingsStore(context: Context, private val cipher: SecretCipher) {
         val FILES_SHOW_SYSTEM = booleanPreferencesKey("files_show_system")
         /** 1.8.1: servers removed with Undo still possible: id -> time of removal (JSON map). */
         val PENDING_REMOVALS = stringPreferencesKey("pending_server_removals")
+        // 1.11.0
+        fun backupLast(id: String) = longPreferencesKey("config_backup_last_$id")
+        fun backupReminded(id: String) = longPreferencesKey("config_backup_reminded_$id")
+        val BACKUP_REMINDER_DAYS = intPreferencesKey("config_backup_reminder_days")
+        fun checkupMarks(id: String) = stringPreferencesKey("checkup_marks_$id")
+        fun checkupSummary(id: String) = stringPreferencesKey("checkup_summary_$id")
+        val AUTOMATION = booleanPreferencesKey("automation_enabled")
     }
 
     /**
@@ -295,6 +302,10 @@ class SettingsStore(context: Context, private val cipher: SecretCipher) {
             prefs.remove(Keys.certCheck(id))
             prefs.remove(Keys.rules(id))
             prefs.remove(Keys.ruleState(id))
+            prefs.remove(Keys.backupLast(id))
+            prefs.remove(Keys.backupReminded(id))
+            prefs.remove(Keys.checkupMarks(id))
+            prefs.remove(Keys.checkupSummary(id))
             val pending = decodePendingRemovals(prefs) - id
             if (pending.isEmpty()) prefs.remove(Keys.PENDING_REMOVALS) else prefs[Keys.PENDING_REMOVALS] = json.encodeToString(pending)
             val np = decodeNotifications(prefs)
@@ -511,9 +522,175 @@ class SettingsStore(context: Context, private val cipher: SecretCipher) {
         return changed
     }
 
+    // --- 1.11.0: config backup, protection checkup, automation ---
+
+    /** When this phone last saved a TrueNAS configuration backup of [serverId] (epoch ms). */
+    fun lastConfigBackup(serverId: String): Flow<Long?> = store.data.map { it[Keys.backupLast(serverId)] }.distinctUntilChanged()
+    suspend fun lastConfigBackupOnce(serverId: String): Long? = store.data.first()[Keys.backupLast(serverId)]
+    suspend fun setLastConfigBackup(serverId: String, at: Long = System.currentTimeMillis()) { store.edit { it[Keys.backupLast(serverId)] = at } }
+
+    /** Days after which the alert check reminds about a new backup; 0 = off (the default). */
+    val backupReminderDays: Flow<Int> = store.data.map { it[Keys.BACKUP_REMINDER_DAYS] ?: 0 }.distinctUntilChanged()
+    suspend fun setBackupReminderDays(days: Int) { store.edit { it[Keys.BACKUP_REMINDER_DAYS] = days.coerceIn(0, 365) } }
+    suspend fun backupReminded(serverId: String): Long? = store.data.first()[Keys.backupReminded(serverId)]
+    suspend fun setBackupReminded(serverId: String, at: Long) { store.edit { it[Keys.backupReminded(serverId)] = at } }
+
+    /** Checks the user hid or accepted (check id -> mark). */
+    fun checkupMarks(serverId: String): Flow<Map<String, app.truenascompanion.data.checkup.CheckMark>> = store.data.map { p ->
+        p[Keys.checkupMarks(serverId)]?.let { runCatching { json.decodeFromString<Map<String, app.truenascompanion.data.checkup.CheckMark>>(it) }.getOrNull() } ?: emptyMap()
+    }.distinctUntilChanged()
+
+    suspend fun setCheckupMark(serverId: String, checkId: String, mark: app.truenascompanion.data.checkup.CheckMark?) {
+        store.edit { p ->
+            val cur = p[Keys.checkupMarks(serverId)]?.let { runCatching { json.decodeFromString<Map<String, app.truenascompanion.data.checkup.CheckMark>>(it) }.getOrNull() } ?: emptyMap()
+            val next = if (mark == null) cur - checkId else cur + (checkId to mark)
+            if (next.isEmpty()) p.remove(Keys.checkupMarks(serverId)) else p[Keys.checkupMarks(serverId)] = json.encodeToString(next)
+        }
+    }
+
+    /** Last checkup score, for the Home card. */
+    fun checkupSummary(serverId: String): Flow<app.truenascompanion.data.checkup.CheckupSummary?> = store.data.map { p ->
+        p[Keys.checkupSummary(serverId)]?.let { runCatching { json.decodeFromString<app.truenascompanion.data.checkup.CheckupSummary>(it) }.getOrNull() }
+    }.distinctUntilChanged()
+
+    suspend fun saveCheckupSummary(serverId: String, summary: app.truenascompanion.data.checkup.CheckupSummary) {
+        store.edit { it[Keys.checkupSummary(serverId)] = json.encodeToString(summary) }
+    }
+
+    /** Automation apps (Tasker plugin, intents) may talk to YTN. Off by default; never imported from a settings file. */
+    val automationEnabled: Flow<Boolean> = store.data.map { it[Keys.AUTOMATION] ?: false }.distinctUntilChanged()
+    suspend fun automationEnabledOnce(): Boolean = store.data.first()[Keys.AUTOMATION] ?: false
+    suspend fun setAutomationEnabled(on: Boolean) { store.edit { it[Keys.AUTOMATION] = on } }
+
+    // --- 1.11.0: settings export / import (see SettingsTransfer) ---
+
+    /**
+     * Everything worth moving to another phone, as plain JSON (the caller encrypts it). Secrets (API keys, saved
+     * passwords, WireGuard configs) only with [includeSecrets]. Never included: session tokens (tied to this sign-in),
+     * app lock settings (tied to this phone's biometrics), alert history and other runtime state, the automation switch.
+     */
+    suspend fun exportSettings(includeSecrets: Boolean): SettingsExport {
+        val p = store.data.first()
+        val pending = decodePendingRemovals(p)
+        val servers = decodeServers(p).filterNot { it.id in pending }
+        val per = servers.associate { s ->
+            s.id to ServerExtras(
+                layout = p[Keys.layout(s.id)],
+                rules = p[Keys.rules(s.id)],
+                checkupMarks = p[Keys.checkupMarks(s.id)],
+                apiKey = if (includeSecrets) p[Keys.apiKey(s.id)]?.let { cipher.decrypt(it) } else null,
+                password = if (includeSecrets) p[Keys.password(s.id)]?.let { cipher.decrypt(it) } else null,
+                wireGuard = if (includeSecrets) p[Keys.wireGuard(s.id)]?.let { cipher.decrypt(it) } else null,
+            )
+        }
+        return SettingsExport(
+            includesSecrets = includeSecrets,
+            servers = if (includeSecrets) servers else servers.map { it.copy(wireGuardConfigured = false, vpnMode = app.truenascompanion.data.model.VpnMode.OFF) },
+            activeServer = p[Keys.ACTIVE]?.takeIf { id -> servers.any { it.id == id } },
+            perServer = per,
+            global = GlobalExport(
+                notifications = p[Keys.NOTIFICATIONS],
+                theme = p[Keys.THEME],
+                dynamicColor = p[Keys.DYNAMIC],
+                giveUpMs = p[Keys.CONNECTION_GIVE_UP_MS],
+                updateAuto = p[Keys.UPDATE_AUTO],
+                updateChannel = p[Keys.UPDATE_CHANNEL],
+                filesShowSystem = p[Keys.FILES_SHOW_SYSTEM],
+                backupReminderDays = p[Keys.BACKUP_REMINDER_DAYS],
+            ),
+        )
+    }
+
+    /**
+     * Applies an imported file. [replace] removes every saved server first and takes the file's general settings;
+     * merge only adds servers whose id isn't saved here yet and keeps this phone's general settings.
+     * Notification switches are imported per server only for servers that end up saved.
+     */
+    suspend fun importSettings(e: SettingsExport, replace: Boolean): Int {
+        if (replace) decodeServers(store.data.first()).forEach { deleteServer(it.id) }
+        val existing = decodeServers(store.data.first()).map { it.id }.toSet()
+        val added = e.servers.filter { it.id !in existing }
+        val secrets = added.associate { s -> s.id to e.perServer[s.id] }.mapValues { (_, x) ->
+            Triple(x?.apiKey?.let { cipher.encrypt(it) }, x?.password?.let { cipher.encrypt(it) }, x?.wireGuard?.let { cipher.encrypt(it) })
+        }
+        store.edit { p ->
+            val list = decodeServers(p) + added.map { s -> if (secrets[s.id]?.third == null) s.copy(wireGuardConfigured = false, vpnMode = app.truenascompanion.data.model.VpnMode.OFF) else s }
+            p[Keys.SERVERS] = json.encodeToString(list)
+            added.forEach { s ->
+                val x = e.perServer[s.id]
+                x?.layout?.let { p[Keys.layout(s.id)] = it }
+                x?.rules?.let { p[Keys.rules(s.id)] = it }
+                x?.checkupMarks?.let { p[Keys.checkupMarks(s.id)] = it }
+                secrets[s.id]?.first?.let { p[Keys.apiKey(s.id)] = it }
+                secrets[s.id]?.second?.let { p[Keys.password(s.id)] = it }
+                secrets[s.id]?.third?.let { p[Keys.wireGuard(s.id)] = it }
+            }
+            val ids = list.map { it.id }.toSet()
+            if (replace) {
+                val g = e.global
+                g.notifications?.let { raw ->
+                    val np = runCatching { json.decodeFromString<NotificationPrefs>(raw) }.getOrNull()
+                    if (np != null) p[Keys.NOTIFICATIONS] = json.encodeToString(np.copy(enabledServers = np.enabledServers.filter { it in ids }.toSet()))
+                }
+                g.theme?.let { p[Keys.THEME] = it }
+                g.dynamicColor?.let { p[Keys.DYNAMIC] = it }
+                g.giveUpMs?.let { p[Keys.CONNECTION_GIVE_UP_MS] = it }
+                g.updateAuto?.let { p[Keys.UPDATE_AUTO] = it }
+                g.updateChannel?.let { p[Keys.UPDATE_CHANNEL] = it }
+                g.filesShowSystem?.let { p[Keys.FILES_SHOW_SYSTEM] = it }
+                g.backupReminderDays?.let { p[Keys.BACKUP_REMINDER_DAYS] = it }
+                e.activeServer?.takeIf { it in ids }?.let { p[Keys.ACTIVE] = it }
+            }
+            if (p[Keys.ACTIVE] == null || p[Keys.ACTIVE] !in ids) list.firstOrNull()?.let { p[Keys.ACTIVE] = it.id }
+        }
+        return added.size
+    }
+
+    suspend fun savedServerIds(): Set<String> = decodeServers(store.data.first()).map { it.id }.toSet()
+
     private fun decodeNotifications(prefs: Preferences): NotificationPrefs =
         prefs[Keys.NOTIFICATIONS]?.let { runCatching { json.decodeFromString<NotificationPrefs>(it) }.getOrNull() } ?: NotificationPrefs()
 
     private fun decodeServers(prefs: Preferences): List<ServerConfig> =
         prefs[Keys.SERVERS]?.let { runCatching { json.decodeFromString<List<ServerConfig>>(it) }.getOrNull() } ?: emptyList()
 }
+
+/** 1.11.0: the plain content of a settings export (encrypted by [SettingsTransfer] before it leaves the app). */
+@Serializable
+data class SettingsExport(
+    val format: String = "ytn-settings",
+    val version: Int = 1,
+    val includesSecrets: Boolean = false,
+    val servers: List<ServerConfig> = emptyList(),
+    val activeServer: String? = null,
+    val perServer: Map<String, ServerExtras> = emptyMap(),
+    val global: GlobalExport = GlobalExport(),
+    /** Device-level extras stored outside DataStore (Quick Settings action tile). */
+    val tileAction: String? = null,
+    val exportedAt: Long = 0,
+    val appVersion: String = "",
+)
+
+@Serializable
+data class ServerExtras(
+    val layout: String? = null,
+    val rules: String? = null,
+    val checkupMarks: String? = null,
+    val apiKey: String? = null,
+    val password: String? = null,
+    val wireGuard: String? = null,
+) {
+    val hasSecrets: Boolean get() = apiKey != null || password != null || wireGuard != null
+}
+
+@Serializable
+data class GlobalExport(
+    val notifications: String? = null,
+    val theme: String? = null,
+    val dynamicColor: Boolean? = null,
+    val giveUpMs: Long? = null,
+    val updateAuto: Boolean? = null,
+    val updateChannel: String? = null,
+    val filesShowSystem: Boolean? = null,
+    val backupReminderDays: Int? = null,
+)
