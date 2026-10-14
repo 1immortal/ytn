@@ -41,6 +41,16 @@
 
 <p align="center"><img src="docs/images/widget.png" width="560" alt="Home-screen widget in light and dark"><br><sub>A home-screen widget shows your NAS at a glance (it follows your light or dark theme).</sub></p>
 
+**New in 1.12:** wake your NAS from your phone with **Wake-on-LAN** (from All servers, the "can't connect" card, a Quick Settings tile or Tasker), enjoy **tablet, foldable and landscape layouts** with a side rail and list-and-details side by side, and keep an eye on your NAS from a **Wear OS watch** with a tile, a complication and an alert list.
+
+<p align="center">
+  <img src="docs/images/tablet-two-pane-dark.png" width="420" alt="Tablet: certificate list with details side by side">
+  &nbsp;
+  <img src="docs/images/wake-on-lan.png" width="200" alt="All servers with reachability dots and a Wake button">
+  &nbsp;
+  <img src="docs/images/watch-tile.png" width="180" alt="Watch tile: NAS health, pools, alerts and CPU">
+</p>
+
 **New in 1.11:** back up and restore your NAS's configuration (with a reminder and a "back up first" step before updates), get a protection checkup with a score and one-tap fixes, move your settings to a new phone in an encrypted file, edit custom apps' compose files safely, clean up unused images, and automate YTN with Tasker.
 
 **New in 1.10:** write your own alert rules ("tell me when a pool passes 85%" or "when a backup hasn't worked for two days"), follow scrubs and backups live in your notifications, keep nights quiet, see roughly how many months until a pool is full, and pick from four new home-screen widgets.
@@ -64,6 +74,8 @@
 - 🌐 **Check your network settings**: interfaces, addresses, gateways, DNS and routes at a glance, view only, so nothing on your phone can cut your NAS off the network.
 - 🏠 **Works at home and away**: uses your home address on your Wi-Fi and your remote address everywhere else, with an optional built-in VPN (WireGuard or Tailscale) so your NAS doesn't have to be open to the internet.
 - 🔒 **Private and secure**: sign in with your TrueNAS account (with two-factor codes), lock the app with your fingerprint, and everything stays encrypted on your phone.
+- ⏰ **Wake it up**: send a Wake-on-LAN packet from your phone and see when the NAS is back online.
+- 📱 **Phones, tablets, foldables and watches**: two-pane layouts on big screens, and a Wear OS app for a quick look at your wrist.
 - 🎨 **Looks at home on your phone**: light and dark themes, colours from your wallpaper, a themed icon, large-font and TalkBack friendly.
 
 Want the full list? See **[everything YTN can do](docs/FEATURES.md)**.
@@ -86,6 +98,19 @@ You need Android 8.0 or newer and TrueNAS 25.04 or newer.
 - **HTTPS only (since 1.7.1):** the app only signs in over `https://`. TrueNAS serves HTTPS out of the box, so this usually just means using `https://` in the address.
 
 </details>
+
+### On your watch (Wear OS)
+
+The watch app shows your NAS's health, a tile, a complication and your alerts. It gets everything from YTN on your phone, so it never needs your NAS password. You need a Wear OS 3+ watch paired with the phone, **Google Play services on both** (the phone and watch talk through it), and YTN 1.12 or newer on the phone.
+
+The watch app isn't on the Play Store, so install it once from a computer:
+
+1. Download **`truenas-companion-wear-release.apk`** from the [latest release](https://github.com/1immortal/ytn/releases/latest) to your computer, and install [Android platform tools](https://developer.android.com/tools/releases/platform-tools) (`adb`).
+2. On the watch, turn on **Developer options** (Settings › System › About › tap *Build number* 7 times), then turn on **ADB debugging** and **Wireless debugging**. Keep the watch on the same Wi-Fi as your computer.
+3. In *Wireless debugging*, tap **Pair new device**. On your computer run `adb pair <ip>:<pairing port>` and enter the code shown on the watch, then `adb connect <ip>:<port>` with the address shown on the *Wireless debugging* screen.
+4. Run `adb install truenas-companion-wear-release.apk`. Then turn Wireless debugging off again.
+
+Open YTN on the watch, or add the **YTN** tile and complication from your watch face. Updates to the watch app are installed the same way (`adb install -r`). The phone app's updater only updates the phone.
 
 ## Getting started
 

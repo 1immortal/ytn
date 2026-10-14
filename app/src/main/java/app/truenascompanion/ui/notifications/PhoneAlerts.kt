@@ -222,6 +222,7 @@ fun PhoneAlertsSettings(server: ServerConfig?, onMessage: (String) -> Unit, onRu
     }
     val allow = rememberNotificationAccess { tick++ }
 
+    androidx.compose.foundation.layout.Column {
     PhoneAlertsSection(
         server = server,
         prefs = p,
@@ -241,6 +242,15 @@ fun PhoneAlertsSettings(server: ServerConfig?, onMessage: (String) -> Unit, onRu
         },
         onRules = onRules,
     )
+    // 1.12.0: what the Wear OS app may show (titles only; also needs lock-screen private content allowed).
+    var watchTitles by remember { mutableStateOf(container.wear.showTitles) }
+    app.truenascompanion.ui.components.SwitchRow(
+        label = "Alert titles on the watch",
+        supporting = "Show short alert titles in the YTN watch app. Only when your phone allows private content on the lock screen; otherwise the watch shows counts.",
+        checked = watchTitles,
+        onChange = { watchTitles = it; container.wear.showTitles = it },
+    )
+    }
 }
 
 /** Stateless section (also rendered by the screenshot tests). */

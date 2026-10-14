@@ -56,6 +56,8 @@ data class NetInterface(
     /** Addresses on the interface right now (`state.aliases`, without the MAC entry), "address/prefix". */
     val currentAddresses: List<String> = emptyList(),
     val mac: String = "",
+    /** 1.12.0: burned-in MAC (state.permanent_link_address / hardware_link_address), used for Wake-on-LAN. */
+    val hardwareMac: String = "",
     /** e.g. "1 Gb/s" or "10 Gb/s · Fibre", from `state.active_media_subtype`; null when unknown. */
     val speed: String? = null,
     val lagProtocol: String? = null,

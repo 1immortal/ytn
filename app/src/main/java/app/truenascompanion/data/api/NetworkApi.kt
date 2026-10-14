@@ -112,6 +112,7 @@ class NetworkApi(private val api: TrueNasApi) {
                 configuredAddresses = o["aliases"].arr()?.mapNotNull { it.obj()?.let(::alias) } ?: emptyList(),
                 currentAddresses = st?.get("aliases").arr()?.mapNotNull { it.obj()?.let(::alias) } ?: emptyList(),
                 mac = st?.str("link_address").orEmpty(),
+                hardwareMac = (st?.str("permanent_link_address")?.takeIf { it.isNotBlank() } ?: st?.str("hardware_link_address")).orEmpty(),
                 speed = speedText(st?.str("active_media_subtype")),
                 lagProtocol = o.str("lag_protocol"),
                 lagPorts = run {

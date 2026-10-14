@@ -78,3 +78,13 @@ The full list, area by area. For how each feature works under the hood, see [TEC
 - **Stays secure.** Sign in with your TrueNAS username, password and two-factor code (or an API key), lock the app with your fingerprint, and keep all credentials encrypted on the device.
 - **Stays up to date.** The app tells you when a new version is out and installs it for you after checking that it's genuine. In **System › About** you can pick the **Release** or **Debug (preview builds)** update channel (default matches the build you installed). Mixing channels usually requires uninstalling first.
 - **Looks good.** Material You design with light and dark themes.
+
+## New in 1.12
+
+- **Wake-on-LAN.** Each server can store Wake-on-LAN settings (server › Edit › *Wake-on-LAN*). YTN fills in the MAC address from the NAS's network interfaces (pick which one), uses the subnet's broadcast address (and always 255.255.255.255 too), port 9 or 7. The magic packet is sent from the phone. Wake buttons are on the server card in **All servers**, on the **can't connect** card, in a **Wake NAS** Quick Settings tile and as a **Tasker** action. After sending, YTN shows "Waking… (up to ~2 min)" and then "Online" once the NAS answers.
+  - It works on your home network, or over a VPN only if your router passes broadcasts on. For other setups you can enter a relay (host:port that forwards to the LAN) or a directed broadcast address.
+  - Wake-on-LAN must also be turned on in the NAS's BIOS/UEFI and network card. The setup screen says so.
+- **Reachability dots.** Every card in All servers shows a green or red dot for whether the NAS answers right now.
+- **Tablets, foldables and landscape.** A navigation rail on medium screens and landscape phones, a permanent side menu on large screens, list and details side by side for Apps, Datasets, Shares, Alerts, Disks, Users, Certificates, Services, Cloud sync, Replication, iSCSI and Files, a multi-column Home that keeps your card order, and 3–4 tiles per row on the System screen. Resizing or folding the device keeps where you were.
+- **Wear OS app.** A status tile, a complication (short or long text), a quick status screen with CPU and disk temperature, and your alert list. Acknowledging an alert asks on the watch and then opens the confirmation on your phone. You can also wake the NAS from the watch (through the phone). The watch gets everything from the phone: it never has your NAS password, the phone only sends updates when it already checks your NAS, and the watch can ask for a refresh. Alert titles reach the watch only when your phone allows private notification content on the lock screen (and you can turn titles off).
+

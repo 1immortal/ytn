@@ -82,7 +82,7 @@ object WakeOnLan {
 
     /** Interfaces that can wake the NAS (a real MAC; physical ones first, as [NetInterface] lists are already sorted). */
     fun candidates(interfaces: List<NetInterface>): List<Candidate> = interfaces.filter { !it.notPresent }.mapNotNull { i ->
-        val mac = normalizeMac(i.mac) ?: return@mapNotNull null
+        val mac = normalizeMac(i.hardwareMac) ?: normalizeMac(i.mac) ?: return@mapNotNull null
         val v4 = (i.currentAddresses + i.configuredAddresses).firstOrNull { isIpv4(it.substringBefore('/')) }
         Candidate(i.name, mac, v4?.let(::subnetBroadcast), v4?.substringBefore('/'), v4?.substringAfter('/', "")?.toIntOrNull())
     }.distinctBy { it.interfaceName }
