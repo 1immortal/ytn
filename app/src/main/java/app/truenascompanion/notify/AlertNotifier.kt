@@ -55,6 +55,8 @@ object DeepLink {
     /** 1.11.0: System › Backup & restore, and the protection checkup. */
     const val DEST_BACKUP = "config_backup"
     const val DEST_CHECKUP = "checkup"
+    /** 1.12.0: Wake-on-LAN setup of the active (or given) server. */
+    const val DEST_WAKE_SETUP = "wake_setup"
 }
 
 /** Builds and posts all app notifications (alerts, sign-in reminder, test, instant-mode service). */

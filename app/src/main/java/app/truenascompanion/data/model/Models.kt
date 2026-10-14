@@ -49,6 +49,8 @@ data class ServerConfig(
     val httpsUpgradeTried: Boolean = false,
     /** 1.7.1: the user dismissed the "home address turned off" banner (the address stays off until fixed). */
     val httpsBannerDismissed: Boolean = false,
+    /** 1.12.0: Wake-on-LAN settings (MAC, broadcast, port, optional relay); null until set up. Not a secret. */
+    val wol: app.truenascompanion.data.wol.WolConfig? = null,
     /** Which address this (resolved) copy connects to. Never stored: see [forRoute]. */
     @kotlinx.serialization.Transient val activeRoute: Route = Route.REMOTE,
 ) {

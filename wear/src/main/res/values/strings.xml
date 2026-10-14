@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">YTN</string>
+    <string name="tile_label">NAS status</string>
+    <string name="complication_label">NAS status</string>
+</resources>

@@ -158,6 +158,9 @@ private object Routes {
     fun initScript(id: Int?) = if (id == null) "init_script" else "init_script?id=$id"
     fun pickFile(path: String?) = if (path == null) "pick_file" else "pick_file?path=${enc(path)}"
     const val VPN = "vpn/{id}"
+    // 1.12.0: Wake-on-LAN settings of a server
+    const val WAKE = "wake_setup/{id}"
+    fun wake(id: String) = "wake_setup/${enc(id)}"
     const val VPN_SETUP = "vpn_setup/{id}"
     const val SHELL = "shell/{kind}?app={app}&ctr={ctr}&cname={cname}&cmd={cmd}&id={id}"
     fun vpn(id: String) = "vpn/${enc(id)}"
@@ -238,6 +241,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
             DeepLink.DEST_RULES -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.ALERT_RULES) }
             DeepLink.DEST_TASKS -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.JOBS) }
             DeepLink.DEST_BACKUP -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.BACKUP)) }
+            DeepLink.DEST_WAKE_SETUP -> (link.serverId ?: container.repository.activeServer.value?.id ?: list.firstOrNull()?.id)?.let { nav.navigate(Routes.wake(it)) }
             DeepLink.DEST_CHECKUP -> { container.storageTabRequest.value = app.truenascompanion.ui.storage.StorageTabs.PROTECTION; nav.switchTab(Tab.STORAGE.route); nav.navigate(Routes.CHECKUP) }
             DeepLink.DEST_SHELL, DeepLink.DEST_RESTART_APP, DeepLink.DEST_SCRUB_POOL ->
                 app.truenascompanion.quick.QuickAction.byDestination(link.destination)?.let { quick = app.truenascompanion.ui.quick.QuickRequest(it, link.arg) }
@@ -437,6 +441,9 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.VPN, "id") { a ->
                     app.truenascompanion.ui.vpn.VpnScreen(a.getValue("id"), onBack = { nav.popBackStack() }, onSetup = { nav.navigate(Routes.vpnSetup(a.getValue("id"))) })
                 }
+                pushed(Routes.WAKE, "id") { a ->
+                    app.truenascompanion.ui.servers.WakeSetupScreen(a.getValue("id"), onBack = { nav.popBackStack() })
+                }
                 pushed(Routes.VPN_SETUP, "id") { a ->
                     app.truenascompanion.ui.vpn.VpnSetupScreen(a.getValue("id"), onBack = { nav.popBackStack() })
                 }
@@ -586,6 +593,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                         },
                         onBack = if (canGoBack) ({ nav.popBackStack() }) else null,
                         onVpn = { sid -> nav.navigate(Routes.vpn(sid)) },
+                        onWake = { sid -> nav.navigate(Routes.wake(sid)) },
                     )
                 }
             }

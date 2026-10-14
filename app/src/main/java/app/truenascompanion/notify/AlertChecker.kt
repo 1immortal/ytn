@@ -158,6 +158,9 @@ class AlertChecker(
         }
     }
 
+    /** 1.12.0: called after each server's check with its alerts, their titles and the check's lazily loaded data. */
+    var afterCheck: (suspend (ServerConfig, List<app.truenascompanion.data.model.AlertItem>, Map<String, String>, app.truenascompanion.notify.rules.RuleData) -> Unit)? = null
+
     private suspend fun process(server: ServerConfig, api: TrueNasApi) {
         val alerts = api.alerts()
         val prefs = settings.notificationPrefs.first()
@@ -201,6 +204,8 @@ class AlertChecker(
         runCatching { evaluateRules(server, data) }.onFailure { Log.i(TAG, "rules ${server.name}: ${it.message}") }
         runCatching { refreshProgress(server, api, data) }.onFailure { Log.i(TAG, "progress ${server.name}: ${it.message}") }
         runCatching { sampleRunway(server, data) }.onFailure { Log.i(TAG, "runway ${server.name}: ${it.message}") }
+        // 1.12.0: the watch's status (titles only), from this same check: no extra polling.
+        runCatching { afterCheck?.invoke(server, alerts, byUuid, data) }.onFailure { Log.i(TAG, "watch ${server.name}: ${it.message}") }
         Log.d(TAG, "check ${server.name}: ${alerts.size} alerts, ${toNotify.size} new, baseline=${result.isBaseline}")
     }
 

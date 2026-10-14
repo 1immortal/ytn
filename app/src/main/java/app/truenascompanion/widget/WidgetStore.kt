@@ -64,6 +64,8 @@ object WidgetStore {
         snap.appsRunning?.let { o.put("appsRunning", it) }
         snap.appsTotal?.let { o.put("appsTotal", it) }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, o.toString()) }
+        // 1.12.0: the watch gets the same snapshot (only pushed when a watch with YTN is connected).
+        runCatching { (context.applicationContext as? app.truenascompanion.TrueNasApp)?.container?.wear?.onSnapshot(snap) }
         // 1.2.0: the status tile shows the same data; ask the system to refresh it if it's in the shade.
         runCatching {
             android.service.quicksettings.TileService.requestListeningState(context, android.content.ComponentName(context, app.truenascompanion.quick.StatusTileService::class.java))

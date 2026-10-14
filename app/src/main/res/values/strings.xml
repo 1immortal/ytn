@@ -12,6 +12,7 @@
     <string name="shortcut_scrub">Scrub pool…</string>
     <string name="shortcut_scrub_long">Scrub a pool…</string>
     <string name="tile_status_label">NAS status</string>
+    <string name="tile_wake_label">Wake NAS</string>
     <string name="tile_action_label">TrueNAS action</string>
     <!-- 1.10.0 widgets -->
     <string name="widget_dot_label">YTN status dot</string>

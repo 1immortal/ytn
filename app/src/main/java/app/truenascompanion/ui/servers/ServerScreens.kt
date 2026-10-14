@@ -102,6 +102,14 @@ fun ServerListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onOpen: () -> 
     val vm = appViewModel { ServerListViewModel(it) }
     val servers by vm.servers.collectAsStateWithLifecycle()
     val activeId by vm.activeId.collectAsStateWithLifecycle()
+    // 1.12.0: reachability dots and Wake-on-LAN.
+    val appContainer = (androidx.compose.ui.platform.LocalContext.current.applicationContext as app.truenascompanion.TrueNasApp).container
+    val reach by appContainer.wake.reach.collectAsStateWithLifecycle()
+    val wakeStates by appContainer.wake.states.collectAsStateWithLifecycle()
+    LaunchedEffect(servers?.map { it.id }) {
+        val l = servers ?: return@LaunchedEffect
+        while (true) { appContainer.wake.probeAll(l); kotlinx.coroutines.delay(30_000) }
+    }
     var toDelete by remember { mutableStateOf<ServerConfig?>(null) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     // 1.8.1: removing a server can be undone for a few seconds (longer with TalkBack on).
@@ -154,7 +162,11 @@ fun ServerListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onOpen: () -> 
                             IconBadge(Icons.Rounded.Dns)
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(server.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    ReachDot(reach[server.id] ?: app.truenascompanion.data.wol.Reach.UNKNOWN)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(server.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                                 Text(server.displayHost, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.height(6.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -165,6 +177,10 @@ fun ServerListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onOpen: () -> 
                             }
                             IconButton(onClick = { onEdit(server.id) }) { Icon(Icons.Rounded.Edit, "Edit") }
                             IconButton(onClick = { toDelete = server }) { Icon(Icons.Rounded.Delete, "Delete") }
+                        }
+                        if (server.wol != null) {
+                            Spacer(Modifier.height(8.dp))
+                            WakeAction(wakeStates[server.id] ?: app.truenascompanion.data.wol.WakeState.Idle, onWake = { appContainer.wake.wake(server) }, compact = true)
                         }
                     }
                 }
@@ -183,7 +199,7 @@ fun ServerListScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onOpen: () -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onBack: (() -> Unit)?, onVpn: ((String) -> Unit)? = null) {
+fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onBack: (() -> Unit)?, onVpn: ((String) -> Unit)? = null, onWake: ((String) -> Unit)? = null) {
     val vm = appViewModel(key = "edit-$serverId") { ServerEditViewModel(it, serverId) }
     val s by vm.state.collectAsStateWithLifecycle()
     var showKey by rememberSaveable { mutableStateOf(false) }
@@ -345,6 +361,10 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onBack: (() -> Unit)
             )
 
             if (serverId != null && onVpn != null) VpnEntryCard(onClick = { onVpn(serverId) })
+            if (serverId != null && onWake != null) {
+                val saved by container.settings.servers.collectAsStateWithLifecycle(initialValue = emptyList())
+                WakeEntryCard(configured = saved.firstOrNull { it.id == serverId }?.wol != null, onClick = { onWake(serverId) })
+            }
 
             TextButton(onClick = { advanced = !advanced }) {
                 Text("Advanced options")

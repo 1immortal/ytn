@@ -1,5 +1,8 @@
 package app.truenascompanion
 
+import app.truenascompanion.data.wol.WakeController
+import app.truenascompanion.wear.WearBridge
+import app.truenascompanion.quick.WakeTileService
 import app.truenascompanion.data.runway.RunwayStore
 import app.truenascompanion.util.runCatchingCancellable
 
@@ -84,6 +87,36 @@ class AppContainer(app: Application) {
     )
     /** One-shot request for the Storage tab to show a segment (e.g. Protection from the dashboard card). */
     val storageTabRequest = MutableStateFlow<Int?>(null)
+    /** 1.12.0: Wake-on-LAN (send + "Waking…" polling) and the reachability dots of All servers. */
+    val wake = WakeController(appScope, onOnline = { s ->
+        if (repository.activeServer.value?.id == s.id) repository.retryConnection()
+    })
+    /** 1.12.0: wakes a server by id, or the active one; false if it has no Wake-on-LAN settings. */
+    suspend fun wakeServer(id: String? = null): Boolean {
+        val all = settings.servers.first()
+        val target = all.firstOrNull { it.id == (id ?: settings.activeServerId.first()) } ?: all.firstOrNull()
+        return target?.let { wake.wake(it) } == true
+    }
+    /** 1.12.0: status snapshot for the Wear OS app (Data Layer; only when the watch app is installed). */
+    val wear = WearBridge(app, appScope)
+
+    /** 1.12.0: feeds the watch from the alert check and the wake controller (no polling of its own). */
+    fun startWear() {
+        alertChecker.afterCheck = { server, alerts, titles, data ->
+            if (server.id == settings.activeServerId.first() && wear.watchConnected()) {
+                val cpu = data.cpuAverage(5)?.toInt()
+                val temp = data.diskTempLowest(10)?.values?.maxOrNull()?.toInt()
+                wear.onChecked(server.name.ifBlank { server.displayHost }, alerts, titles, cpu, temp)
+            }
+        }
+        appScope.launch {
+            kotlinx.coroutines.flow.combine(repository.activeServer, wake.states) { s, st -> s to st }.collect { (s, st) ->
+                val label = s?.let { st[it.id] }?.let { WakeController.label(it) }
+                wear.onWake(label?.takeIf { it.length < 40 }, s?.wol != null)
+                runCatching { android.service.quicksettings.TileService.requestListeningState(context, android.content.ComponentName(context, WakeTileService::class.java)) }
+            }
+        }
+    }
 }
 
 class TrueNasApp : Application() {
@@ -102,6 +135,7 @@ class TrueNasApp : Application() {
             // 1.8.0 (security review): NAS files opened with "Open with" don't stay in the cache across app starts.
             app.truenascompanion.data.files.FilePolicy.clearOpenWithCache(this@TrueNasApp)
         }
+        container.startWear()
         container.appScope.launch {
             container.settings.autoUpdateCheck.collect { UpdateCheckWorker.sync(this@TrueNasApp, it) }
         }

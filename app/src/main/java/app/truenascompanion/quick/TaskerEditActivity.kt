@@ -39,7 +39,7 @@ data class PluginChoice(val kind: String, val screen: String? = null, val quick:
 
 fun pluginChoices(condition: Boolean): List<PluginChoice> =
     if (condition) Automation.Condition.entries.map { PluginChoice(Automation.CONDITION, condition = it.name) }
-    else listOf(PluginChoice(Automation.REFRESH)) +
+    else listOf(PluginChoice(Automation.REFRESH), PluginChoice(Automation.WAKE)) +
         Automation.SCREENS.keys.map { PluginChoice(Automation.OPEN, screen = it) } +
         Automation.QUICK.map { PluginChoice(Automation.QUICK_ACTION, quick = it.id) }
 

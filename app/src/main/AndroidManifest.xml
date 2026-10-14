@@ -79,6 +79,27 @@
             android:taskAffinity=""
             android:theme="@style/Theme.TrueNASCompanion.Translucent" />
 
+        <!-- 1.12.0: Wake-on-LAN tile (sends the magic packet for the active server; waking changes nothing on the NAS) -->
+        <service
+            android:name=".quick.WakeTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_wake"
+            android:label="@string/tile_wake_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="false" />
+        </service>
+        <!-- 1.12.0: requests from the YTN Wear OS app (only the paired watch, same package and key, can send them) -->
+        <service
+            android:name=".wear.WearMessageService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/ytn/" />
+            </intent-filter>
+        </service>
         <!-- Quick Settings tiles (1.2.0) -->
         <service
             android:name=".quick.StatusTileService"
@@ -126,6 +147,7 @@
             <intent-filter>
                 <action android:name="${applicationId}.action.REFRESH" />
                 <action android:name="${applicationId}.action.QUERY_STATUS" />
+                <action android:name="${applicationId}.action.WAKE" />
             </intent-filter>
         </receiver>
         <activity

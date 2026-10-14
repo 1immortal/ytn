@@ -254,7 +254,7 @@ fun ConnectionOverlayHost(
         initialValue = ConnectionTimeoutPrefs.DEFAULT_MS,
     )
     // The server list and editor stay usable while the server is unreachable (fix the address, switch servers).
-    val onEdit = currentRoute?.startsWith("server_edit") == true || currentRoute == "servers"
+    val onEdit = currentRoute?.startsWith("server_edit") == true || currentRoute == "servers" || currentRoute?.startsWith("wake_setup") == true
     val serverId = active?.id
     val serverName = active?.name?.takeIf { it.isNotBlank() } ?: active?.urlHost() ?: "your NAS"
 

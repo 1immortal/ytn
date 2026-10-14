@@ -12,6 +12,7 @@ import app.truenascompanion.data.model.Health
 import app.truenascompanion.notify.DeepLink
 import app.truenascompanion.widget.WidgetSnapshot
 import app.truenascompanion.widget.WidgetStore
+import kotlinx.coroutines.flow.first
 
 /** Opens the app from a tile, collapsing the shade (PendingIntent form on Android 14+). */
 @SuppressLint("StartActivityAndCollapseDeprecated")
@@ -95,5 +96,57 @@ class ActionTileService : TileService() {
         val a = QuickActions.tileAction(this)
         QuickActions.reportUsed(this, a)
         openApp(QuickActions.intent(this, a.destination), 7102)
+    }
+}
+
+/**
+ * 1.12.0: Wake-on-LAN tile. Sends the magic packet for the active server from the phone (no confirmation: waking
+ * changes nothing on the NAS) and shows "Waking…" / "Online". Without Wake-on-LAN settings it opens their setup.
+ */
+class WakeTileService : TileService() {
+    private fun container() = (applicationContext as app.truenascompanion.TrueNasApp).container
+
+    private fun activeServer(): app.truenascompanion.data.model.ServerConfig? = runCatching {
+        kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.withTimeoutOrNull(500) {
+                val c = container()
+                val all = c.settings.servers.first()
+                val id = c.settings.activeServerId.first()
+                all.firstOrNull { it.id == id } ?: all.firstOrNull()
+            }
+        }
+    }.getOrNull()
+
+    override fun onStartListening() {
+        super.onStartListening()
+        val tile = qsTile ?: return
+        val s = activeServer()
+        val state = s?.let { container().wake.state(it.id) } ?: app.truenascompanion.data.wol.WakeState.Idle
+        tile.label = getString(R.string.tile_wake_label)
+        val sub = when {
+            s == null -> "Not set up"
+            s.wol == null -> "Set up Wake-on-LAN"
+            state is app.truenascompanion.data.wol.WakeState.Waking -> "Waking…"
+            state == app.truenascompanion.data.wol.WakeState.Online -> "Online"
+            state == app.truenascompanion.data.wol.WakeState.TimedOut -> "No answer"
+            state is app.truenascompanion.data.wol.WakeState.Failed -> "Couldn't send"
+            else -> s.name
+        }
+        if (Build.VERSION.SDK_INT >= 29) tile.subtitle = sub else tile.label = "${tile.label}: $sub"
+        tile.contentDescription = "Wake NAS, $sub"
+        tile.state = if (state is app.truenascompanion.data.wol.WakeState.Waking) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_wake)
+        tile.updateTile()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        val s = activeServer()
+        if (s?.wol == null) {
+            openApp(QuickActions.intent(this, DeepLink.DEST_WAKE_SETUP, serverId = s?.id), 7103)
+            return
+        }
+        container().wake.wake(s)
+        onStartListening()
     }
 }

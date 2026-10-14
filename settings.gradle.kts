@@ -21,5 +21,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "TrueNASCompanion"
 include(":app")
+include(":wearlink")
+include(":wear")
 include(":terminal")
 project(":terminal").projectDir = file("third_party/termux-terminal")

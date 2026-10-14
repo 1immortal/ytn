@@ -12,6 +12,7 @@ import app.truenascompanion.notify.DeepLinkGuard
 import app.truenascompanion.widget.WidgetRefreshWorker
 import app.truenascompanion.widget.WidgetSnapshot
 import app.truenascompanion.widget.WidgetStore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -40,6 +41,8 @@ object Automation {
     const val STATUS = "STATUS"
     const val OPEN = "OPEN"
     const val QUICK_ACTION = "QUICK_ACTION"
+    /** 1.12.0: Wake-on-LAN for the active server. Waking changes nothing on the NAS, so no confirmation is needed. */
+    const val WAKE = "WAKE"
 
     const val EXTRA_SCREEN = "screen"
     const val EXTRA_QUICK_ACTION = "quick_action"
@@ -74,12 +77,14 @@ object Automation {
     /** What a request turns into, decided purely (unit tested). */
     sealed interface Request {
         data object Refresh : Request
+        data object Wake : Request
         data class Open(val destination: String) : Request
         data class Quick(val action: QuickAction, val target: String?) : Request
     }
 
     fun parse(kind: String?, screen: String?, quick: String?, target: String?): Request? = when (kind) {
         REFRESH -> Request.Refresh
+        WAKE -> Request.Wake
         OPEN -> SCREENS[screen?.lowercase()]?.let { Request.Open(it) }
         QUICK_ACTION -> QuickAction.byId(quick)?.takeIf { it in QUICK }?.let { a ->
             Request.Quick(a, target?.trim()?.takeIf { it.isNotEmpty() && it.length <= 128 && a != QuickAction.ALERTS })
@@ -89,13 +94,19 @@ object Automation {
 
     /** The in-app intent (signed, active server) that opens the screen or the action's confirmation. */
     fun appIntent(context: Context, r: Request): Intent? = when (r) {
-        Request.Refresh -> null
+        Request.Refresh, Request.Wake -> null
         is Request.Open -> QuickActions.intent(context, r.destination)
         is Request.Quick -> QuickActions.intent(context, r.action.destination, r.target)
     }
 
     fun refresh(context: Context) {
         WidgetRefreshWorker.refreshNow(context, force = true)
+    }
+
+    /** 1.12.0: sends the magic packet for the active server (no-op without Wake-on-LAN settings). */
+    fun wake(context: Context) {
+        val c = (context.applicationContext as TrueNasApp).container
+        c.appScope.launch { c.wakeServer() }
     }
 
     fun enabled(context: Context): Boolean =
@@ -170,6 +181,7 @@ object Automation {
 
     fun blurb(kind: String?, screen: String?, quick: String?, target: String?, condition: String?): String = when (kind) {
         REFRESH -> "Refresh NAS status"
+        WAKE -> "Wake the NAS (Wake-on-LAN)"
         OPEN -> "Open ${SCREEN_LABELS[screen] ?: screen}"
         QUICK_ACTION -> (QuickAction.byId(quick)?.longLabel ?: "Quick action") + (target?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
         CONDITION -> runCatching { Condition.valueOf(condition.orEmpty()).label }.getOrDefault("NAS status")
@@ -183,6 +195,7 @@ class AutomationReceiver : BroadcastReceiver() {
         if (!Automation.enabled(context)) return
         when (intent.action) {
             Automation.action(context, Automation.REFRESH) -> Automation.refresh(context)
+            Automation.action(context, Automation.WAKE) -> Automation.wake(context)
             Automation.action(context, Automation.QUERY_STATUS) -> {
                 val extras = Automation.statusExtras(WidgetStore.load(context))
                 if (isOrderedBroadcast) setResultExtras(extras)
@@ -202,6 +215,7 @@ class AutomationActivity : Activity() {
         when (r) {
             null -> Unit
             Automation.Request.Refresh -> Automation.refresh(this)
+            Automation.Request.Wake -> Automation.wake(this)
             else -> Automation.appIntent(this, r)?.let { runCatching { startActivity(it) } }
         }
         finish()
@@ -225,6 +239,7 @@ class TaskerFireReceiver : BroadcastReceiver() {
                 val r = Automation.parse(b!!.getString(Automation.B_KIND), b.getString(Automation.B_SCREEN), b.getString(Automation.B_QUICK), b.getString(Automation.B_TARGET)) ?: return
                 when (r) {
                     Automation.Request.Refresh -> Automation.refresh(context)
+                    Automation.Request.Wake -> Automation.wake(context)
                     else -> Automation.appIntent(context, r)?.let { target ->
                         (context.applicationContext as TrueNasApp).container.notifier.postAutomationPrompt(
                             Automation.blurb(b.getString(Automation.B_KIND), b.getString(Automation.B_SCREEN), b.getString(Automation.B_QUICK), b.getString(Automation.B_TARGET), null),

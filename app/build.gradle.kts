@@ -16,8 +16,8 @@ android {
         applicationId = "app.truenascompanion"
         minSdk = 26
         targetSdk = 37
-        versionCode = 31
-        versionName = "1.11.0"
+        versionCode = 32
+        versionName = "1.12.0"
         // Public GitHub repository whose Releases the in-app update check reads (override: -PupdateRepo=owner/name).
         // 64/32-bit ARM phones plus x86_64 emulators (the WireGuard Go library is ~3.5 MB per ABI).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -126,6 +126,13 @@ dependencies {
     implementation(libs.zxing.core)
     // 1.11.0: YAML check and formatting for the custom-app compose editor (pure Java, no dependencies).
     implementation(libs.snakeyaml.engine)
+    // 1.12.0: window size classes for tablet, foldable and landscape layouts.
+    implementation(libs.compose.material3.adaptive)
+    // 1.12.0: Wear OS companion. The phone talks to the watch over the Wearable Data Layer (needs Google Play services
+    // on the phone; without them the watch part is simply unavailable). The format lives in :wearlink.
+    implementation(project(":wearlink"))
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
