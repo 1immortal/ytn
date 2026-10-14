@@ -83,6 +83,7 @@ import app.truenascompanion.ui.theme.LocalBrandColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Default give-up window before the failure overlay (matches System › Connection default / OkHttp connectTimeout).
@@ -346,6 +347,16 @@ fun ConnectionOverlayHost(
                 when (ui) {
                     is ConnectionOverlayUi.Connecting -> ConnectionConnectingPanel(ui.serverName)
                     is ConnectionOverlayUi.Failed -> ConnectionFailurePanel(
+                        wake = active?.takeIf { it.wol != null }?.let { srv ->
+                            {
+                                val states by container.wake.states.collectAsStateWithLifecycle()
+                                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                                app.truenascompanion.ui.servers.WakeAction(
+                                    state = states[srv.id] ?: app.truenascompanion.data.wol.WakeState.Idle,
+                                    onWake = { scope.launch { container.wakeServer(srv.id) } },
+                                )
+                            }
+                        },
                         serverName = ui.serverName,
                         detail = ui.detail,
                         onQuit = {
@@ -444,6 +455,8 @@ fun ConnectionFailurePanel(
     onCheckConfig: () -> Unit,
     onRetry: (() -> Unit)? = null,
     onSwitchServer: (() -> Unit)? = null,
+    /** 1.12.0: Wake-on-LAN button, shown when the server has Wake-on-LAN settings. */
+    wake: (@Composable () -> Unit)? = null,
 ) {
     val brand = LocalBrandColors.current
     val accent = if (brand.dark) brand.accent else MaterialTheme.colorScheme.primary
@@ -519,6 +532,10 @@ fun ConnectionFailurePanel(
                         Spacer(Modifier.width(8.dp))
                         Text("Connection settings", textAlign = TextAlign.Center)
                     }
+                }
+                if (wake != null) {
+                    Spacer(Modifier.height(10.dp))
+                    wake()
                 }
                 if (onSwitchServer != null) {
                     Spacer(Modifier.height(4.dp))

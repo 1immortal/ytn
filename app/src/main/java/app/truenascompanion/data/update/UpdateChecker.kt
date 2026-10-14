@@ -125,6 +125,9 @@ class UpdateChecker(
         fun pickApkAsset(assets: List<JsonObject>, channel: UpdateChannel): JsonObject? {
             val preferred = channel.apkAssetName
             assets.firstOrNull { it.s("name") == preferred }?.let { return it }
+            // Never the Wear OS APK (truenas-companion-wear-*.apk): it can't be installed on a phone.
+            @Suppress("NAME_SHADOWING")
+            val assets = assets.filterNot { it.s("name")?.contains("-wear", ignoreCase = true) == true }
             // Deprecated: truenas-companion-v1.0.2.apk / truenas-companion-v1.0.2-debug.apk
             return when (channel) {
                 UpdateChannel.RELEASE -> assets.firstOrNull { obj ->
