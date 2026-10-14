@@ -310,10 +310,11 @@ private fun intervalText(minutes: Int) = if (minutes % 60 == 0) "${minutes / 60}
 fun filterHub(query: String): List<Pair<HubGroup, List<HubItem>>> =
     HubGroup.entries.map { g -> g to g.items.filter { it.matches(query) } }.filter { it.second.isNotEmpty() }
 
-/** 2 columns unless the per-tile text room (width scaled down by the font size) gets too small; 3 on tablets. */
+/** 2 columns unless the per-tile text room (width scaled down by the font size) gets too small; 3 on tablets, 4 on wide ones. */
 fun hubColumns(screenWidthDp: Int, fontScale: Float): Int {
     val room = (screenWidthDp - 32) / fontScale.coerceAtLeast(0.5f)
     return when {
+        room >= 900 -> 4 // 1.12.0: wide tablets
         room >= 640 -> 3
         room >= 280 -> 2
         else -> 1

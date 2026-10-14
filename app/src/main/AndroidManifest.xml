@@ -52,6 +52,8 @@
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|density|keyboard|keyboardHidden|navigation"
             android:theme="@style/Theme.TrueNASCompanion">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

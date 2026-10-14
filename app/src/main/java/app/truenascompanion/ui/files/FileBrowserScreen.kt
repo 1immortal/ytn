@@ -366,7 +366,7 @@ fun FileBrowserContent(
     if (mkdirDialog) MkdirDialog(onDismiss = { mkdirDialog = false }, onCreate = { mkdirDialog = false; actions.onMkdir(it) })
     ui.details?.let { e ->
         if (inlineDetails) Unit else {
-            ModalBottomSheet(onDismissRequest = actions.onHideDetails, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            app.truenascompanion.ui.adaptive.AdaptiveSheet(onDismiss = actions.onHideDetails) {
                 FileDetails(e, ui.detailsStat, ui.detailsError, actions)
             }
         }

@@ -196,7 +196,7 @@ fun ComposeDiffDialog(old: String, new: String, appName: String, onConfirm: () -
             Column {
                 Text("+$added  −$removed lines. TrueNAS validates the file, then recreates the app's containers (it restarts if it's running).", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(8.dp))
-                ComposeDiffView(lines, Modifier.heightIn(max = 380.dp))
+                ComposeDiffView(lines, Modifier.heightIn(max = app.truenascompanion.ui.adaptive.dialogListMaxHeight()))
             }
         },
         confirmButton = { GlowButton(onClick = onConfirm) { Text("Save & redeploy") } },

@@ -144,7 +144,8 @@ fun TimeField(hour: Int, minute: Int, onPick: (Int, Int) -> Unit) {
         AlertDialog(
             onDismissRequest = { open = false },
             title = { Text("Run at") },
-            text = { TimePicker(state = state) },
+            // 1.12.0: the clock face doesn't fit a landscape phone; the text input does.
+            text = { if (app.truenascompanion.ui.adaptive.LocalWindowLayout.current.compactHeight) androidx.compose.material3.TimeInput(state = state) else TimePicker(state = state) },
             confirmButton = { TextButton(onClick = { open = false; onPick(state.hour, state.minute) }) { Text("OK") } },
             dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
         )

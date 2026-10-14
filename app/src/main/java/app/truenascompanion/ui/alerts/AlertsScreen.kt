@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -291,6 +293,10 @@ fun AlertCard(
     // 1.8.0 (UI review P1-14): built on the shared card; snoozed/dismissed alerts mute their text (not the buttons).
     val quiet = a.dismissed || snoozedUntil != null
     val textColor = if (quiet) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    // 1.12.0: on tablets the tapped alert opens in full next to the list.
+    if (expanded && app.truenascompanion.ui.adaptive.LocalDetailHost.current != null) {
+        app.truenascompanion.ui.adaptive.showInDetailPane { AlertDetailPane(a, target, onOpen = onOpen, onDismiss = onDismiss, onClose = { expanded = false }) }
+    }
     app.truenascompanion.ui.components.ElevatedSection(
         modifier = modifier.fillMaxWidth().animateContentSize().semantics {
             stateDescription = if (expanded) "Expanded" else "Collapsed"
@@ -355,4 +361,23 @@ private fun snoozeText(until: Long): String {
     val sameDay = until - System.currentTimeMillis() < 20 * 3_600_000L
     val f = if (sameDay) java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT) else java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
     return f.format(java.util.Date(until))
+}
+
+/** 1.12.0: the whole alert, in the detail pane of the two-pane layout. */
+@Composable
+fun AlertDetailPane(a: AlertItem, target: AlertTarget?, onOpen: (AlertTarget) -> Unit, onDismiss: () -> Unit, onClose: () -> Unit) {
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        app.truenascompanion.ui.components.StatusChip(a.health, a.level.lowercase().replaceFirstChar { it.uppercase() })
+        Text(a.text, style = MaterialTheme.typography.bodyLarge)
+        a.datetimeMillis?.let { Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        a.klass?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            if (target != null) androidx.compose.material3.FilledTonalButton(onClick = { onOpen(target) }) { Text(target.label) }
+            if (!a.dismissed) TextButton(onClick = onDismiss) { Text("Dismiss") }
+            TextButton(onClick = onClose) { Text("Close") }
+        }
+    }
 }

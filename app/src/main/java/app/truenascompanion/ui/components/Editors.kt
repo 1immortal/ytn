@@ -71,6 +71,8 @@ fun FullScreenEditor(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // 1.12.0: on two-pane layouts the form opens next to its list instead of covering the screen.
+    if (app.truenascompanion.ui.adaptive.showInDetailPane { FullScreenEditorBody(title, saveLabel, canSave, dirty, onSave, onDismiss, content) }) return
     Dialog(
         onDismissRequest = {},
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false, dismissOnBackPress = false),

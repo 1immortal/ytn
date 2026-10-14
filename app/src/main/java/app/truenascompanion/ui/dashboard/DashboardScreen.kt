@@ -257,18 +257,21 @@ internal fun WidgetGrid(
     compact: Boolean = false,
 ) {
     val gap = if (compact) 8.dp else 12.dp
+    // 1.12.0: 4 or 6 columns on tablets; cards keep the customised order (half = 1 column, full = 2).
+    androidx.compose.foundation.layout.BoxWithConstraints {
+    val cols = app.truenascompanion.ui.adaptive.LocalWindowLayout.current.dashboardColumns(maxWidth.value.toInt())
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Fixed(cols),
         contentPadding = PaddingValues(start = if (compact) 12.dp else 16.dp, end = if (compact) 12.dp else 16.dp, top = 8.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(gap),
         verticalArrangement = Arrangement.spacedBy(gap),
         modifier = Modifier.fillMaxSize(),
     ) {
         if (data.error != null) {
-            item(span = { GridItemSpan(2) }) { InfoBanner("Showing last known data: ${data.error}", health = Health.WARNING) }
+            item(span = { GridItemSpan(maxLineSpan) }) { InfoBanner("Showing last known data: ${data.error}", health = Health.WARNING) }
         }
         if (widgets.isEmpty()) {
-            item(span = { GridItemSpan(2) }) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 app.truenascompanion.ui.components.EmptyState(
                     icon = Icons.Rounded.Dashboard, title = "Your dashboard is empty",
                     message = "All blocks are hidden. Tap edit to choose what to show.",
@@ -287,6 +290,7 @@ internal fun WidgetGrid(
                 onClick = target, modifier = Modifier.animateItem().animateContentSize(), compact = compact,
             )
         }
+    }
     }
 }
 
@@ -310,15 +314,17 @@ internal fun EditGrid(
         onMoveKey(from.key as? String, to.key as? String)
         haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
     }
+    androidx.compose.foundation.layout.BoxWithConstraints {
+    val cols = app.truenascompanion.ui.adaptive.LocalWindowLayout.current.dashboardColumns(maxWidth.value.toInt())
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Fixed(cols),
         state = gridState,
         contentPadding = PaddingValues(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item(span = { GridItemSpan(2) }, key = "hint") {
+        item(span = { GridItemSpan(maxLineSpan) }, key = "hint") {
             Column {
                 Text(
                     "Long-press and drag to reorder (or use the Move up / Move down actions). Tap the eye to show or hide a block and the arrows to switch between half and full width. Layouts are saved per server.",
@@ -384,6 +390,7 @@ internal fun EditGrid(
                 }
             }
         }
+    }
     }
 }
 

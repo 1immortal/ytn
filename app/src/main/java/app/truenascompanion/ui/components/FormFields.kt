@@ -128,7 +128,7 @@ private fun <T> SearchPickDialog(title: String, options: List<T>, optionLabel: (
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Search") }, leadingIcon = { Icon(Icons.Rounded.Search, null) }, modifier = Modifier.fillMaxWidth())
-                LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                LazyColumn(Modifier.heightIn(max = app.truenascompanion.ui.adaptive.dialogListMaxHeight())) {
                     items(shown) { o ->
                         Text(
                             optionLabel(o), style = MaterialTheme.typography.bodyMedium,

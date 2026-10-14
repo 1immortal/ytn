@@ -2,6 +2,8 @@ package app.truenascompanion.ui
 
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.truenascompanion.ui.components.glow
@@ -203,6 +205,8 @@ fun AppRoot() {
     androidx.compose.runtime.CompositionLocalProvider(
         app.truenascompanion.ui.lock.LocalDangerGuard provides guard,
         app.truenascompanion.ui.lock.LocalLockGuard provides lockGuard,
+        // 1.12.0: tablet, foldable and landscape layouts follow the window size class.
+        app.truenascompanion.ui.adaptive.LocalWindowLayout provides app.truenascompanion.ui.adaptive.rememberWindowLayout(),
     ) {
         app.truenascompanion.ui.lock.LockGate { AppContent(container, list, nav) }
     }
@@ -252,11 +256,109 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
     val route = entry?.destination?.route
     val showBar = Tab.entries.any { it.route == route }
     var overlayActive by remember { mutableStateOf(false) }
+    val layout = app.truenascompanion.ui.adaptive.LocalWindowLayout.current
+    androidx.compose.runtime.SideEffect { PaneMode.twoPane = layout.twoPane }
+    /** Opens a detail screen; on two panes it replaces the detail next to [list] instead of stacking up. */
+    fun openDetail(route: String, list: String) = nav.navigate(route) { if (layout.twoPane) popUpTo(list) }
+    val listScreens: Map<String, @Composable (androidx.navigation.NavBackStackEntry) -> Unit> = mapOf(
+        Tab.STORAGE.route to { _ ->
+            StorageScreen(
+                onOpenSnapshots = { openDetail(Routes.snapshots(it), Tab.STORAGE.route) },
+                onSnapshotTask = { openDetail(Routes.snapTask(it), Tab.STORAGE.route) },
+                onBrowse = { nav.navigate(Routes.files(it)) },
+                onOpenPool = { openDetail(Routes.poolLayout(it), Tab.STORAGE.route) },
+                onOpenDisk = { openDetail(Routes.disk(it), Tab.STORAGE.route) },
+                onReplace = { openDetail(Routes.replace(it), Tab.STORAGE.route) },
+                onCloudSync = { nav.navigate(Routes.CLOUD_SYNC) },
+                onReplication = { nav.navigate(Routes.REPLICATION) },
+                onIscsi = { nav.navigate(Routes.ISCSI) },
+                onIscsiWizard = { nav.navigate(Routes.ISCSI_WIZARD) },
+                onServices = { nav.navigate(Routes.SERVICES) },
+                onCheckup = { nav.navigate(Routes.CHECKUP) },
+            )
+        },
+        Tab.APPS.route to { _ ->
+            app.truenascompanion.ui.virt.WorkloadsScreen(
+                onJobs = { nav.navigate(Routes.JOBS) },
+                onCatalog = { nav.navigate(Routes.CATALOG) },
+                onOpenApp = { openDetail(Routes.app(it), Tab.APPS.route) },
+                onOpenVm = { openDetail("vm/$it", Tab.APPS.route) },
+                onCreateVm = { nav.navigate(Routes.VM_NEW) },
+                onShell = { nav.navigate(Routes.shell(it)) },
+                onImages = { nav.navigate(Routes.IMAGES) },
+            )
+        },
+        Tab.ALERTS.route to { _ ->
+            AlertsScreen(
+                onOpenTarget = { nav.openTarget(container, it) },
+                onPhoneAlertSettings = { nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.ALERTS)) },
+            )
+        },
+        Routes.ISCSI to { _ ->
+            app.truenascompanion.ui.iscsi.IscsiScreen(
+                onBack = { nav.popBackStack() },
+                nav = app.truenascompanion.ui.iscsi.IscsiNav(
+                    onEdit = { k, id -> openDetail(Routes.iscsiEdit(k, id), Routes.ISCSI) },
+                    onWizard = { openDetail(Routes.ISCSI_WIZARD, Routes.ISCSI) },
+                    onSettings = { openDetail(Routes.ISCSI_SETTINGS, Routes.ISCSI) },
+                    onServices = { nav.navigate(Routes.SERVICES) },
+                ),
+            )
+        },
+        Routes.CLOUD_SYNC to { entry ->
+            val picked by entry.savedStateHandle.getStateFlow<String?>(Routes.PICKED_PATH, null).collectAsStateWithLifecycle()
+            app.truenascompanion.ui.cloud.CloudSyncScreen(
+                onBack = { nav.popBackStack() },
+                onEditTask = { openDetail(Routes.cloudTask(it), Routes.CLOUD_SYNC) },
+                onEditCredential = { openDetail(Routes.cloudCred(it), Routes.CLOUD_SYNC) },
+                onPickFolder = { nav.navigate(Routes.pickFolder(it)) },
+                pickedPath = picked,
+                onPickConsumed = { entry.savedStateHandle[Routes.PICKED_PATH] = null },
+            )
+        },
+        Routes.REPLICATION to { _ ->
+            app.truenascompanion.ui.replication.ReplicationScreen(
+                onBack = { nav.popBackStack() },
+                onEditTask = { openDetail(Routes.replTask(it), Routes.REPLICATION) },
+                onEditConnection = { openDetail(Routes.sshConn(it), Routes.REPLICATION) },
+                onEditKeyPair = { openDetail(Routes.sshKey(it), Routes.REPLICATION) },
+            )
+        },
+        Routes.SERVICES to { _ ->
+            app.truenascompanion.ui.services.ServicesScreen(onBack = { nav.popBackStack() }, onOpenSettings = { openDetail(Routes.service(it), Routes.SERVICES) })
+        },
+        Routes.ACCOUNTS to { _ -> app.truenascompanion.ui.accounts.AccountsScreen(onBack = { nav.popBackStack() }) },
+        Routes.CERTIFICATES to { entry ->
+            app.truenascompanion.ui.certs.CertificatesScreen(onBack = { nav.popBackStack() }, onReviewServer = { id -> nav.navigate(Routes.edit(id)) }, highlight = entry.arguments?.getString("highlight"))
+        },
+        Routes.FILES to { entry ->
+            app.truenascompanion.ui.files.FileBrowserScreen(entry.arguments?.getString("path") ?: app.truenascompanion.data.files.FilePolicy.ROOT, onBack = { nav.popBackStack() })
+        },
+    )
+    val paneHost: @Composable (String, androidx.navigation.NavBackStackEntry, @Composable () -> Unit) -> Unit = { route, entry, content ->
+        val parent = PaneRoutes.DETAIL_PARENT[route]
+        val hint = PaneRoutes.HINTS[parent ?: route] ?: "Pick an item to see it here."
+        when {
+            route in listScreens -> app.truenascompanion.ui.adaptive.ListDetailFrame(list = content, detail = null, hint = hint)
+            parent != null && parent in listScreens -> {
+                val listEntry = remember(entry) { runCatching { nav.getBackStackEntry(parent) }.getOrNull() }
+                app.truenascompanion.ui.adaptive.ListDetailFrame(
+                    list = {
+                        if (listEntry != null) androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides listEntry) {
+                            listScreens.getValue(parent)(listEntry)
+                        } else Unit
+                    },
+                    detail = content, hint = hint,
+                )
+            }
+            else -> content()
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (showBar) {
+            if (showBar && layout.navStyle == app.truenascompanion.ui.adaptive.NavStyle.BOTTOM_BAR) {
                 val badge by container.alertBadge.collectAsStateWithLifecycle()
                 val active by container.repository.activeServer.collectAsStateWithLifecycle()
                 AppNavBar(route, enabled = !overlayActive, alertCount = badge?.takeIf { it.serverId == active?.id }?.count ?: 0) { nav.switchTab(it) }
@@ -277,10 +379,23 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
             onActiveChange = { overlayActive = it },
             onSwitchServer = if (list.size > 1) ({ nav.navigate(Routes.SERVERS) }) else null,
         ) {
-        // 1.8.0 (UI review P2-17): on tablets and in landscape, screens stay at a readable width, centred.
-        Box(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        // 1.12.0: navigation rail / permanent drawer on wide or short windows. It sits inside the connection overlay, so
+        // "Can't connect" covers it too.
+        androidx.compose.foundation.layout.Row(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
+        if (showBar && layout.navStyle != app.truenascompanion.ui.adaptive.NavStyle.BOTTOM_BAR) {
+            val badge by container.alertBadge.collectAsStateWithLifecycle()
+            val active by container.repository.activeServer.collectAsStateWithLifecycle()
+            val count = badge?.takeIf { it.serverId == active?.id }?.count ?: 0
+            if (layout.navStyle == app.truenascompanion.ui.adaptive.NavStyle.DRAWER) AppNavDrawer(route, enabled = !overlayActive, alertCount = count, serverName = active?.name) { nav.switchTab(it) }
+            else AppNavRail(route, enabled = !overlayActive, alertCount = count) { nav.switchTab(it) }
+        }
+        // 1.8.0 (UI review P2-17): on tablets and in landscape, single screens stay at a readable width, centred;
+        // 1.12.0: list-detail screens, the dashboard grid and the System hub use the whole width on two-pane layouts.
+        val wide = layout.twoPane && (route in PaneRoutes.WIDE || route in listScreens.keys || PaneRoutes.DETAIL_PARENT.containsKey(route))
+        Box(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+          androidx.compose.runtime.CompositionLocalProvider(LocalPaneHost provides paneHost) {
             NavHost(
-                modifier = Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxSize(),
+                modifier = Modifier.widthIn(max = if (wide) layout.widePaneMaxWidth else layout.singlePaneMaxWidth).fillMaxSize(),
                 navController = nav,
                 startDestination = Tab.DASHBOARD.route,
                 enterTransition = { fadeIn() },
@@ -303,33 +418,8 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                         onConnection = { nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.CONNECTION)) },
                     )
                 }
-                composable(Tab.STORAGE.route) {
-                    StorageScreen(
-                        onOpenSnapshots = { nav.navigate(Routes.snapshots(it)) },
-                        onSnapshotTask = { nav.navigate(Routes.snapTask(it)) },
-                        onBrowse = { nav.navigate(Routes.files(it)) },
-                        onOpenPool = { nav.navigate(Routes.poolLayout(it)) },
-                        onOpenDisk = { nav.navigate(Routes.disk(it)) },
-                        onReplace = { nav.navigate(Routes.replace(it)) },
-                        onCloudSync = { nav.navigate(Routes.CLOUD_SYNC) },
-                        onReplication = { nav.navigate(Routes.REPLICATION) },
-                        onIscsi = { nav.navigate(Routes.ISCSI) },
-                        onIscsiWizard = { nav.navigate(Routes.ISCSI_WIZARD) },
-                        onServices = { nav.navigate(Routes.SERVICES) },
-                        onCheckup = { nav.navigate(Routes.CHECKUP) },
-                    )
-                }
-                pushed(Routes.ISCSI) { _ ->
-                    app.truenascompanion.ui.iscsi.IscsiScreen(
-                        onBack = { nav.popBackStack() },
-                        nav = app.truenascompanion.ui.iscsi.IscsiNav(
-                            onEdit = { k, id -> nav.navigate(Routes.iscsiEdit(k, id)) },
-                            onWizard = { nav.navigate(Routes.ISCSI_WIZARD) },
-                            onSettings = { nav.navigate(Routes.ISCSI_SETTINGS) },
-                            onServices = { nav.navigate(Routes.SERVICES) },
-                        ),
-                    )
-                }
+                composable(Tab.STORAGE.route) { e -> PaneHost(Tab.STORAGE.route, e) { listScreens.getValue(Tab.STORAGE.route)(e) } }
+                pushedWithEntry(Routes.ISCSI) { _, e -> listScreens.getValue(Routes.ISCSI)(e) }
                 pushed(Routes.ISCSI_EDIT, "kind", "id?") { a ->
                     val kind = app.truenascompanion.ui.iscsi.IscsiKind.entries.firstOrNull { it.name == a["kind"] }
                     if (kind == null) LaunchedEffect(Unit) { nav.popBackStack() }
@@ -341,17 +431,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.ISCSI_WIZARD) { _ ->
                     app.truenascompanion.ui.iscsi.IscsiWizardScreen(onBack = { nav.popBackStack() }, onDone = { nav.popBackStack() })
                 }
-                pushedWithEntry(Routes.CLOUD_SYNC) { _, entry ->
-                    val picked by entry.savedStateHandle.getStateFlow<String?>(Routes.PICKED_PATH, null).collectAsStateWithLifecycle()
-                    app.truenascompanion.ui.cloud.CloudSyncScreen(
-                        onBack = { nav.popBackStack() },
-                        onEditTask = { nav.navigate(Routes.cloudTask(it)) },
-                        onEditCredential = { nav.navigate(Routes.cloudCred(it)) },
-                        onPickFolder = { nav.navigate(Routes.pickFolder(it)) },
-                        pickedPath = picked,
-                        onPickConsumed = { entry.savedStateHandle[Routes.PICKED_PATH] = null },
-                    )
-                }
+                pushedWithEntry(Routes.CLOUD_SYNC) { _, e -> listScreens.getValue(Routes.CLOUD_SYNC)(e) }
                 pushedWithEntry(Routes.CLOUD_TASK, "id?") { a, entry ->
                     val picked by entry.savedStateHandle.getStateFlow<String?>(Routes.PICKED_PATH, null).collectAsStateWithLifecycle()
                     app.truenascompanion.ui.cloud.CloudTaskEditorScreen(
@@ -365,14 +445,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.CLOUD_CRED, "id?") { a ->
                     app.truenascompanion.ui.cloud.CloudCredentialEditorScreen(a["id"]?.toIntOrNull(), onBack = { nav.popBackStack() })
                 }
-                pushed(Routes.REPLICATION) { _ ->
-                    app.truenascompanion.ui.replication.ReplicationScreen(
-                        onBack = { nav.popBackStack() },
-                        onEditTask = { nav.navigate(Routes.replTask(it)) },
-                        onEditConnection = { nav.navigate(Routes.sshConn(it)) },
-                        onEditKeyPair = { nav.navigate(Routes.sshKey(it)) },
-                    )
-                }
+                pushedWithEntry(Routes.REPLICATION) { _, e -> listScreens.getValue(Routes.REPLICATION)(e) }
                 pushed(Routes.REPL_TASK, "id?") { a ->
                     app.truenascompanion.ui.replication.ReplicationTaskEditorScreen(
                         a["id"]?.toIntOrNull(), onAddConnection = { nav.navigate(Routes.sshConn(null)) }, onBack = { nav.popBackStack() },
@@ -394,9 +467,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.SNAPSHOTS, "dataset") { a ->
                     app.truenascompanion.ui.protection.SnapshotsScreen(a.getValue("dataset"), onBack = { nav.popBackStack() }, onBrowse = { nav.navigate(Routes.files(it)) })
                 }
-                pushed(Routes.FILES, "path?") { a ->
-                    app.truenascompanion.ui.files.FileBrowserScreen(a["path"] ?: app.truenascompanion.data.files.FilePolicy.ROOT, onBack = { nav.popBackStack() })
-                }
+                pushedWithEntry(Routes.FILES, "path?") { _, e -> listScreens.getValue(Routes.FILES)(e) }
                 pushed(Routes.POOL_LAYOUT, "pool") { a ->
                     app.truenascompanion.ui.disks.PoolLayoutScreen(
                         a.getValue("pool"), onBack = { nav.popBackStack() },
@@ -420,17 +491,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.SNAP_TASK, "id?") { a ->
                     app.truenascompanion.ui.protection.SnapshotTaskEditorScreen(a["id"]?.toIntOrNull(), onBack = { nav.popBackStack() })
                 }
-                composable(Tab.APPS.route) {
-                    app.truenascompanion.ui.virt.WorkloadsScreen(
-                        onJobs = { nav.navigate(Routes.JOBS) },
-                        onCatalog = { nav.navigate(Routes.CATALOG) },
-                        onOpenApp = { nav.navigate(Routes.app(it)) },
-                        onOpenVm = { nav.navigate("vm/$it") },
-                        onCreateVm = { nav.navigate(Routes.VM_NEW) },
-                        onShell = { nav.navigate(Routes.shell(it)) },
-                        onImages = { nav.navigate(Routes.IMAGES) },
-                    )
-                }
+                composable(Tab.APPS.route) { e -> PaneHost(Tab.APPS.route, e) { listScreens.getValue(Tab.APPS.route)(e) } }
                 pushed(Routes.IMAGES) { app.truenascompanion.ui.apps.ImagesScreen(onBack = { nav.popBackStack() }) }
                 pushed(Routes.COMPOSE_EDIT, "name") { a ->
                     app.truenascompanion.ui.apps.ComposeEditorScreen(a.getValue("name"), onBack = { nav.popBackStack() })
@@ -488,12 +549,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.LOGS, "name", "container?") { a ->
                     LogsScreen(a.getValue("name"), a["container"], onBack = { nav.popBackStack() })
                 }
-                composable(Tab.ALERTS.route) {
-                    AlertsScreen(
-                        onOpenTarget = { nav.openTarget(container, it) },
-                        onPhoneAlertSettings = { nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.ALERTS)) },
-                    )
-                }
+                composable(Tab.ALERTS.route) { e -> PaneHost(Tab.ALERTS.route, e) { listScreens.getValue(Tab.ALERTS.route)(e) } }
                 composable(Tab.SYSTEM.route) { SystemScreen(onServers = { nav.navigate(Routes.SERVERS) }, onOverview = { nav.navigate(Routes.OVERVIEW) }, onJobs = { nav.navigate(Routes.JOBS) },
                     onShell = { nav.navigate(Routes.shell(app.truenascompanion.data.shell.ShellTarget.Host)) },
                     onAccounts = { nav.navigate(Routes.ACCOUNTS) }, onReports = { nav.navigate(Routes.REPORTS) }, onAudit = { nav.navigate(Routes.AUDIT) },
@@ -509,9 +565,7 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                         onRules = { nav.navigate(Routes.ALERT_RULES) },
                     )
                 }
-                pushed(Routes.SERVICES) {
-                    app.truenascompanion.ui.services.ServicesScreen(onBack = { nav.popBackStack() }, onOpenSettings = { nav.navigate(Routes.service(it)) })
-                }
+                pushedWithEntry(Routes.SERVICES) { _, e -> listScreens.getValue(Routes.SERVICES)(e) }
                 pushed(Routes.SERVICE, "kind") { a ->
                     val kind = runCatching { app.truenascompanion.data.services.ServiceKind.valueOf(a.getValue("kind")) }.getOrNull()
                     if (kind == null) LaunchedEffect(Unit) { nav.popBackStack() }
@@ -544,15 +598,13 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                     )
                 }
                 composable(Routes.JOBS) { JobsScreen(onBack = { nav.popBackStack() }) }
-                pushed(Routes.ACCOUNTS) { app.truenascompanion.ui.accounts.AccountsScreen(onBack = { nav.popBackStack() }) }
+                pushedWithEntry(Routes.ACCOUNTS) { _, e -> listScreens.getValue(Routes.ACCOUNTS)(e) }
                 pushed(Routes.REPORTS) { app.truenascompanion.ui.reports.ReportsScreen(onBack = { nav.popBackStack() }) }
                 pushed(Routes.AUDIT) { app.truenascompanion.ui.audit.AuditScreen(onBack = { nav.popBackStack() }) }
                 // 1.9.0: Network settings, view only.
                 pushed(Routes.ALERT_RULES) { app.truenascompanion.ui.notifications.AlertRulesScreen(onBack = { nav.popBackStack() }) }
                 pushed(Routes.NETWORK) { app.truenascompanion.ui.network.NetworkScreen(onBack = { nav.popBackStack() }, onReports = { nav.navigate(Routes.REPORTS) }) }
-                pushed(Routes.CERTIFICATES, "highlight?") { a ->
-                    app.truenascompanion.ui.certs.CertificatesScreen(onBack = { nav.popBackStack() }, onReviewServer = { id -> nav.navigate(Routes.edit(id)) }, highlight = a["highlight"])
-                }
+                pushedWithEntry(Routes.CERTIFICATES, "highlight?") { _, e -> listScreens.getValue(Routes.CERTIFICATES)(e) }
                 composable(
                     Routes.SERVERS,
                     enterTransition = { slideInHorizontally { it } + fadeIn() },
@@ -597,6 +649,8 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                     )
                 }
             }
+          }
+        }
         }
         }
     }
@@ -683,11 +737,11 @@ private fun androidx.navigation.NavGraphBuilder.pushedWithEntry(
             val optional = raw.endsWith("?")
             navArgument(raw.removeSuffix("?")) { type = NavType.StringType; nullable = optional; if (optional) defaultValue = null }
         },
-        enterTransition = { slideInHorizontally { it } + fadeIn() },
-        popExitTransition = { slideOutHorizontally { it } + fadeOut() },
+        enterTransition = { if (PaneMode.twoPane) fadeIn() else slideInHorizontally { it } + fadeIn() },
+        popExitTransition = { if (PaneMode.twoPane) fadeOut() else slideOutHorizontally { it } + fadeOut() },
     ) { entry ->
         val values = args.map { it.removeSuffix("?") }.mapNotNull { k -> entry.arguments?.getString(k)?.let { k to it } }.toMap()
-        content(values, entry)
+        PaneHost(route, entry) { content(values, entry) }
     }
 }
 
@@ -752,3 +806,108 @@ internal fun cappedSp(base: Float, maxScale: Float): androidx.compose.ui.unit.Te
     val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
     return androidx.compose.ui.unit.TextUnit(base * minOf(scale, maxScale) / scale, androidx.compose.ui.unit.TextUnitType.Sp)
 }
+
+/** 1.12.0: whether list-detail screens currently show two panes (read by the navigation transitions). */
+internal object PaneMode {
+    var twoPane by mutableStateOf(false)
+}
+
+/** 1.12.0: which screens are lists, which details belong to them, and what the empty detail pane says. */
+internal object PaneRoutes {
+    val DETAIL_PARENT: Map<String, String> = buildMap {
+        listOf(Routes.APP, Routes.APP_EDIT, Routes.LOGS, Routes.COMPOSE_EDIT, Routes.VM).forEach { put(it, Tab.APPS.route) }
+        listOf(Routes.SNAPSHOTS, Routes.SNAP_TASK, Routes.POOL_LAYOUT, Routes.DISK, Routes.REPLACE).forEach { put(it, Tab.STORAGE.route) }
+        put(Routes.SERVICE, Routes.SERVICES)
+        listOf(Routes.CLOUD_TASK, Routes.CLOUD_CRED).forEach { put(it, Routes.CLOUD_SYNC) }
+        listOf(Routes.REPL_TASK, Routes.SSH_CONN, Routes.SSH_KEY).forEach { put(it, Routes.REPLICATION) }
+        listOf(Routes.ISCSI_EDIT, Routes.ISCSI_SETTINGS, Routes.ISCSI_WIZARD).forEach { put(it, Routes.ISCSI) }
+    }
+    val HINTS: Map<String, String> = mapOf(
+        Tab.APPS.route to "Pick an app or VM to see it here.",
+        Tab.STORAGE.route to "Pick a pool, disk, dataset or share to see it here.",
+        Tab.ALERTS.route to "Tap an alert to read it in full here.",
+        Routes.SERVICES to "Pick a service to change its settings here.",
+        Routes.CLOUD_SYNC to "Pick a cloud sync task or credential to edit it here.",
+        Routes.REPLICATION to "Pick a replication task, connection or key to edit it here.",
+        Routes.ISCSI to "Pick a target, extent or portal to edit it here.",
+        Routes.ACCOUNTS to "Pick a user or group to edit it here.",
+        Routes.CERTIFICATES to "Pick a certificate to see its details here.",
+        Routes.FILES to "Tap a file\u2019s details to see them here.",
+    )
+    /** Wide single screens on two-pane layouts: the dashboard grid and the System hub. */
+    val WIDE = setOf(Tab.DASHBOARD.route, Tab.SYSTEM.route)
+}
+
+/** The pane host for the current NavHost (list-detail frame on tablets). */
+internal val LocalPaneHost = androidx.compose.runtime.staticCompositionLocalOf<@Composable (String, androidx.navigation.NavBackStackEntry, @Composable () -> Unit) -> Unit> {
+    { _, _, content -> content() }
+}
+
+@Composable
+private fun PaneHost(route: String, entry: androidx.navigation.NavBackStackEntry, content: @Composable () -> Unit) = LocalPaneHost.current(route, entry, content)
+
+/** 1.12.0: the tabs as a navigation rail (medium widths, landscape phones). */
+@Composable
+internal fun AppNavRail(route: String?, enabled: Boolean = true, alertCount: Int = 0, onTab: (String) -> Unit) {
+    val brand = app.truenascompanion.ui.theme.LocalBrandColors.current
+    val scheme = MaterialTheme.colorScheme
+    androidx.compose.material3.NavigationRail(
+        containerColor = scheme.surfaceContainer,
+        modifier = Modifier.then(if (!enabled) Modifier.graphicsLayer { alpha = 0.45f } else Modifier).androidxTestTag("nav_rail"),
+    ) {
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+        Tab.entries.forEach { tab ->
+            val selected = route == tab.route
+            androidx.compose.material3.NavigationRailItem(
+                selected = selected, enabled = enabled, onClick = { if (enabled) onTab(tab.route) },
+                icon = { TabIcon(tab, selected, enabled, alertCount) },
+                label = { Text(tab.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip, style = MaterialTheme.typography.labelMedium.copy(fontSize = cappedSp(12f, 1.3f))) },
+                colors = androidx.compose.material3.NavigationRailItemDefaults.colors(
+                    selectedIconColor = if (brand.dark) brand.accent else scheme.primary,
+                    selectedTextColor = if (brand.dark) brand.accent else scheme.primary,
+                    indicatorColor = if (brand.dark) scheme.primary.copy(alpha = 0.22f) else scheme.secondaryContainer,
+                ),
+            )
+        }
+        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+    }
+}
+
+/** 1.12.0: permanent navigation drawer on wide windows (1200 dp and more). */
+@Composable
+internal fun AppNavDrawer(route: String?, enabled: Boolean = true, alertCount: Int = 0, serverName: String? = null, onTab: (String) -> Unit) {
+    androidx.compose.material3.PermanentDrawerSheet(
+        modifier = Modifier.width(240.dp).then(if (!enabled) Modifier.graphicsLayer { alpha = 0.45f } else Modifier).androidxTestTag("nav_drawer"),
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Text("YTN", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 28.dp, top = 24.dp, end = 16.dp))
+        if (serverName != null) Text(serverName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 28.dp, end = 16.dp, bottom = 16.dp))
+        Tab.entries.forEach { tab ->
+            val selected = route == tab.route
+            val badge = if (tab == Tab.ALERTS) app.truenascompanion.ui.alerts.AlertBadge.label(alertCount) else null
+            androidx.compose.material3.NavigationDrawerItem(
+                label = { Text(tab.label) },
+                selected = selected,
+                onClick = { if (enabled) onTab(tab.route) },
+                icon = { Icon(if (selected) tab.selected else tab.unselected, null) },
+                badge = badge?.let { b -> { Text(b) } },
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TabIcon(tab: Tab, selected: Boolean, enabled: Boolean, alertCount: Int) {
+    val brand = app.truenascompanion.ui.theme.LocalBrandColors.current
+    val badge = if (tab == Tab.ALERTS) app.truenascompanion.ui.alerts.AlertBadge.label(alertCount) else null
+    androidx.compose.material3.BadgedBox(badge = { if (badge != null) androidx.compose.material3.Badge { Text(badge) } }) {
+        Icon(
+            if (selected) tab.selected else tab.unselected, if (tab == Tab.ALERTS && alertCount > 0) "${tab.label}, $alertCount open alerts" else null,
+            modifier = if (selected && enabled) Modifier.glow(brand.glow, 8.dp, androidx.compose.foundation.shape.CircleShape, alpha = if (brand.dark) 0.7f else 0.35f) else Modifier,
+        )
+    }
+}
+
+private fun Modifier.androidxTestTag(tag: String) = this.then(Modifier.testTag(tag))

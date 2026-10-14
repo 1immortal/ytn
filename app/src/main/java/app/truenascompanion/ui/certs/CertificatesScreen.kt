@@ -146,7 +146,8 @@ private fun AddCertButton(onImport: () -> Unit, onAcme: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CertSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // 1.12.0: next to the list on tablets.
+    app.truenascompanion.ui.adaptive.AdaptiveSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), content = content)
     }
 }
@@ -259,7 +260,7 @@ private fun CertCard(c: NasCertificate, now: Long, warnDays: Int, isWebUi: Boole
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CertDetailSheet(c: NasCertificate, now: Long, warnDays: Int, isWebUi: Boolean, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) { CertDetailContent(c, now, warnDays, isWebUi) }
+    app.truenascompanion.ui.adaptive.AdaptiveSheet(onDismiss = onDismiss, title = c.name, skipPartiallyExpanded = false) { CertDetailContent(c, now, warnDays, isWebUi) }
 }
 
 @Composable
