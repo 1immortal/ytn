@@ -17,8 +17,8 @@ android {
         applicationId = "app.truenascompanion"
         minSdk = 30
         targetSdk = 37
-        versionCode = 32
-        versionName = "1.12.0"
+        versionCode = 33
+        versionName = "1.12.1"
     }
 
     val keystorePropsFile = (findProperty("keystoreProperties") as String?)?.let { file(it) } ?: file("/home/box/secure/keystore.properties")
