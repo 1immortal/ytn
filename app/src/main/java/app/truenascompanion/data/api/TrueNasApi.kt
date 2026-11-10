@@ -101,7 +101,10 @@ interface TrueNasApi : AutoCloseable {
     suspend fun nicAttachChoices(): List<String> = throw unsupported()
     suspend fun listDir(path: String): List<app.truenascompanion.data.model.FsEntry> = throw unsupported()
     suspend fun zvolParents(): List<String> = throw unsupported()
-    /** `virt.global.config` state, e.g. INITIALIZED / NO_POOL; null when the API has no containers. */
+    /**
+     * `virt.global.config` state, e.g. INITIALIZED / NO_POOL (on TrueNAS 27, derived from `lxc.config`: NO_POOL when no
+     * pool is chosen). Throws [TrueNasException.MethodNotFound] when the NAS has neither API.
+     */
     suspend fun containersState(): String? = throw unsupported()
     suspend fun virtInstances(): List<app.truenascompanion.data.model.VirtInstance> = throw unsupported()
 
@@ -112,10 +115,14 @@ interface TrueNasApi : AutoCloseable {
     suspend fun resizeShell(id: String, cols: Int, rows: Int): Unit = throw unsupported()
     /** Running containers of an app that accept a shell (`app.container_console_choices`): id -> service name. */
     suspend fun appShellContainers(appName: String): Map<String, String> = throw unsupported()
-    suspend fun startVirtStart(id: String): Long = throw unsupported()
-    suspend fun startVirtStop(id: String, force: Boolean): Long = throw unsupported()
-    suspend fun startVirtRestart(id: String): Long = throw unsupported()
-    suspend fun startVirtDelete(id: String): Long = throw unsupported()
+    /**
+     * Container actions. They return the middleware job id to follow, or null when the action already finished
+     * (1.12.3: TrueNAS 27's `container.start` isn't a job, and its restart is a stop job followed by a start).
+     */
+    suspend fun startVirtStart(inst: app.truenascompanion.data.model.VirtInstance): Long? = throw unsupported()
+    suspend fun startVirtStop(inst: app.truenascompanion.data.model.VirtInstance, force: Boolean): Long? = throw unsupported()
+    suspend fun startVirtRestart(inst: app.truenascompanion.data.model.VirtInstance): Long? = throw unsupported()
+    suspend fun startVirtDelete(inst: app.truenascompanion.data.model.VirtInstance): Long? = throw unsupported()
     /** `app.container_log_follow` event source: the last [tail] lines, then new lines as they are written. */
     fun appLogs(appName: String, containerId: String, tail: Int = 500): Flow<LogLine> = kotlinx.coroutines.flow.flow { throw unsupported() }
     /** `app.stats` event source (all apps, every [intervalSeconds]). */

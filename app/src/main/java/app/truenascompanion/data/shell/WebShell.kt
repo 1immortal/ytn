@@ -32,8 +32,11 @@ sealed interface ShellTarget {
         override val title get() = "$appName · $containerName"
     }
 
-    /** `incus exec <instance> <command>` for an Incus container; no command = the instance's default shell. */
-    data class Instance(val id: String, val command: String?) : ShellTarget {
+    /**
+     * `incus exec <instance> <command>` for an Incus container; no command = the instance's default shell.
+     * 1.12.3 [lxc]: a TrueNAS 27 container (`container_id`, entered with nsenter; no command = bash, else sh).
+     */
+    data class Instance(val id: String, val command: String?, val lxc: Boolean = false) : ShellTarget {
         override val title get() = id
     }
 }
@@ -69,7 +72,11 @@ object WebShellProtocol {
             put("container_id", target.containerId)
             put("command", target.command)
         }
-        is ShellTarget.Instance -> buildJsonObject {
+        is ShellTarget.Instance -> if (target.lxc) buildJsonObject {
+            // TrueNAS 27 (middleware TS-27.0.0-RC.1 apps/webshell_app.py): an integer container id, run through `sh -c`.
+            put("container_id", target.id.toLongOrNull() ?: 0L)
+            target.command?.let { put("command", it) }
+        } else buildJsonObject {
             put("virt_instance_id", target.id)
             put("use_console", false)
             target.command?.let { put("command", it) }

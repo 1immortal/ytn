@@ -514,6 +514,12 @@ data class VmInfo(
 
 enum class InstanceStatus { RUNNING, STOPPED, STARTING, STOPPING, FROZEN, ERROR, UNKNOWN }
 
+/**
+ * 1.12.3 (issue #12): which container API a NAS speaks. [INCUS] is `virt.*` (25.04–25.10); [LXC] is `container.*` with
+ * `lxc.config` (TrueNAS 27, where `virt.*` no longer exists).
+ */
+enum class ContainerApi { INCUS, LXC }
+
 data class VirtInstance(
     val id: String,
     val name: String,
@@ -525,6 +531,10 @@ data class VirtInstance(
     val image: String?,
     val addresses: List<String>,
     val storagePool: String?,
+    /** 1.12.3: the API this instance came from; actions and the shell use the same one. */
+    val api: ContainerApi = ContainerApi.INCUS,
+    /** 1.12.3: `container.query` → `shutdown_timeout` (seconds) on TrueNAS 27; null on Incus. */
+    val shutdownTimeout: Int? = null,
 )
 
 /** Everything the "New VM" form collects; the repository turns it into `vm.create` + `vm.device.create` calls. */

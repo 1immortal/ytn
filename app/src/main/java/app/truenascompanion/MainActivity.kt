@@ -38,6 +38,7 @@ class MainActivity : FragmentActivity() {
         val c = (application as TrueNasApp).container
         c.appLock.onForeground()
         c.repository.setForeground(true)
+        c.wear.resend()
     }
 
     override fun onStop() {

@@ -79,6 +79,18 @@ Debug builds add a small badge through a debug-only layer (`app/src/debug/res/dr
 
 `V180IconTest` renders the real icon from the built resources (round, squircle and themed shapes, a home-screen mock-up, the 512 px README icon `docs/images/ytn-icon-512.png` / `icon.png`) and the widget preview image, with `-Pscreenshots`.
 
+## Wear OS capability check
+
+Phone and watch find each other through `@array/android_wear_capabilities` (`ytn_phone` / `ytn_watch`). Release builds shrink resources, so the array is kept by `res/raw/keep.xml` in both modules (CI checks the rule in `V1123WearTest`; CI doesn't build release). After a release build, check both APKs still carry it:
+
+```
+aapt2=$ANDROID_HOME/build-tools/<version>/aapt2
+$aapt2 dump resources app/build/outputs/apk/release/app-release.apk | grep -A2 android_wear_capabilities   # [ytn_phone]
+$aapt2 dump resources wear/build/outputs/apk/release/wear-release.apk | grep -A2 android_wear_capabilities  # [ytn_watch]
+```
+
+No output means R8 removed the array, and the watch will say *Not set up* (issue #12).
+
 ## Release signing
 
 Release builds look for `/home/box/secure/keystore.properties` (or pass `-PkeystoreProperties=/path/to/keystore.properties`) with `storeFile`, `storePassword`, `keyAlias`, `keyPassword`. The keystore itself must never be committed. Without that file, `assembleRelease` is unsigned; `assembleDebug` always uses the Android debug key (`applicationId` suffix `.debug`).

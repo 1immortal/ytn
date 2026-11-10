@@ -137,6 +137,12 @@ fun containersUnavailableMessage(state: String?): String? = when (state?.upperca
     else -> "Containers aren't available right now (state: ${state.lowercase()})."
 }
 
+/** 1.12.3: 25.10 (Incus) waits 60 s; TrueNAS 27 waits for the container's own shutdown timeout. Pure, unit tested. */
+fun containerStopText(i: VirtInstance): String = when (i.api) {
+    app.truenascompanion.data.model.ContainerApi.INCUS -> "Stops the container (waits up to 60 s for a clean shutdown)."
+    app.truenascompanion.data.model.ContainerApi.LXC -> "Stops the container (waits up to ${i.shutdownTimeout ?: 90} s for a clean shutdown)."
+}
+
 data class ContainersUi(val list: UiState<List<VirtInstance>> = UiState.Loading, val unavailable: String? = null)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -231,19 +237,25 @@ class VirtViewModel(private val c: AppContainer, private val withContainers: Boo
         try {
             val id = c.repository.call {
                 when (action) {
-                    InstanceAction.START -> it.startVirtStart(inst.id)
-                    InstanceAction.STOP -> it.startVirtStop(inst.id, force)
-                    InstanceAction.RESTART -> it.startVirtRestart(inst.id)
+                    InstanceAction.START -> it.startVirtStart(inst)
+                    InstanceAction.STOP -> it.startVirtStop(inst, force)
+                    InstanceAction.RESTART -> it.startVirtRestart(inst)
                 }
             }
-            watch(id, Pending(key, "${inst.name}: ${action.label.lowercase()} done", "${action.label} ${inst.name} failed", false))
+            val p = Pending(key, "${inst.name}: ${action.label.lowercase()} done", "${action.label} ${inst.name} failed", false)
+            // 1.12.3: on TrueNAS 27 start (and the stop-then-start restart) finish without a job to follow.
+            if (id != null) watch(id, p) else { _messages.trySend(p.done); finish(key, false) }
         } catch (e: Throwable) { _messages.trySend(e.userMessage()); finish(key, false) }
     }
 
     fun deleteInstance(inst: VirtInstance) = viewModelScope.launch {
         val key = "ct:${inst.id}"
         setBusy(key, "Deleting")
-        try { watch(c.repository.call { it.startVirtDelete(inst.id) }, Pending(key, "${inst.name} deleted", "Deleting ${inst.name} failed", false)) }
+        try {
+            val p = Pending(key, "${inst.name} deleted", "Deleting ${inst.name} failed", false)
+            val id = c.repository.call { it.startVirtDelete(inst) }
+            if (id != null) watch(id, p) else { _messages.trySend(p.done); finish(key, false) }
+        }
         catch (e: Throwable) { _messages.trySend(e.userMessage()); finish(key, false) }
     }
 
@@ -362,7 +374,7 @@ private fun VirtScreen(
             title = "Shell in ${i.name}", containers = emptyList(), defaultLabel = "Default shell",
             onOpen = { _, cmd ->
                 shellFor = null
-                lockGuard.guard("Open a shell in ${i.name}") { onShell(app.truenascompanion.data.shell.ShellTarget.Instance(i.id, cmd)) }
+                lockGuard.guard("Open a shell in ${i.name}") { onShell(app.truenascompanion.data.shell.ShellTarget.Instance(i.id, cmd, lxc = i.api == app.truenascompanion.data.model.ContainerApi.LXC)) }
             },
             onDismiss = { shellFor = null },
         )
@@ -372,7 +384,7 @@ private fun VirtScreen(
             title = if (a == null) "Delete ${i.name}?" else "${a.label} ${i.name}?",
             text = when (a) {
                 null -> "The container and its root disk are deleted. This can't be undone."
-                InstanceAction.STOP -> "Stops the container (waits up to 60 s for a clean shutdown)."
+                InstanceAction.STOP -> containerStopText(i)
                 InstanceAction.RESTART -> "Stops and starts the container again."
                 InstanceAction.START -> ""
             },
@@ -460,7 +472,8 @@ fun ContainerCard(inst: VirtInstance, busy: String?, onAction: (InstanceAction) 
         AnimatedVisibility(expanded) {
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Detail("Type", if (inst.type == "VM") "VM (Incus)" else "Container")
-                Detail("CPU", inst.cpu?.let { "$it cores" } ?: "No limit")
+                if (inst.api == app.truenascompanion.data.model.ContainerApi.LXC) Detail("CPU pinning", inst.cpu ?: "None")
+                else Detail("CPU", inst.cpu?.let { "$it cores" } ?: "No limit")
                 Detail("Memory", inst.memoryBytes?.let { Format.bytes(it) } ?: "No limit")
                 Detail("Autostart", if (inst.autostart) "On" else "Off")
                 inst.storagePool?.let { Detail("Pool", it) }

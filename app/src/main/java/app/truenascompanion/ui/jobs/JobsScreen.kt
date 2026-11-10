@@ -101,6 +101,10 @@ fun JobInfo.title(): String {
         "virt.instance.restart" -> "Restart ${arg ?: "container"}"
         "virt.instance.delete" -> "Delete ${arg ?: "container"}"
         "virt.instance.create" -> "Create container"
+        // 1.12.3: TrueNAS 27 containers (the first argument is the numeric container id).
+        "container.stop" -> "Stop container${arg?.let { " $it" }.orEmpty()}"
+        "container.delete" -> "Delete container${arg?.let { " $it" }.orEmpty()}"
+        "container.create" -> "Create container"
         "app.pull_images" -> "Pull images for ${arg ?: "app"}"
         "catalog.sync" -> "Sync app catalog"
         "pool.scrub.scrub", "pool.scrub.run" -> "Scrub ${arg ?: "pool"}"

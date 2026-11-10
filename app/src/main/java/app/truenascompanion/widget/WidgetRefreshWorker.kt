@@ -132,13 +132,17 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
             ActionsWidget().updateAll(context)
         }
 
-        /** Periodic refresh while a widget is placed; nothing (and the job cancelled) otherwise. */
+        /**
+         * Periodic refresh while a widget is placed; nothing (and the periodic job cancelled) otherwise.
+         * 1.12.3 (issue #12): the one-off [UNIQUE_NOW] run is left alone. A watch, the status tile or an automation
+         * can start the app cold with a forced refresh queued, and the app's start-up [sync] used to cancel it.
+         * A queued run that isn't forced does nothing without a widget anyway ([doWork]).
+         */
         fun sync(context: Context, placed: Boolean = hasWidgets(context)) {
             runCatching {
                 val wm = WorkManager.getInstance(context)
                 if (!placed) {
                     wm.cancelUniqueWork(UNIQUE)
-                    wm.cancelUniqueWork(UNIQUE_NOW)
                     return
                 }
                 val req = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(30, TimeUnit.MINUTES)

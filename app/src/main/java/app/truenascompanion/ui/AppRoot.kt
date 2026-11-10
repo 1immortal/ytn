@@ -164,7 +164,7 @@ private object Routes {
     const val WAKE = "wake_setup/{id}"
     fun wake(id: String) = "wake_setup/${enc(id)}"
     const val VPN_SETUP = "vpn_setup/{id}"
-    const val SHELL = "shell/{kind}?app={app}&ctr={ctr}&cname={cname}&cmd={cmd}&id={id}"
+    const val SHELL = "shell/{kind}?app={app}&ctr={ctr}&cname={cname}&cmd={cmd}&id={id}&api={api}"
     fun vpn(id: String) = "vpn/${enc(id)}"
     fun vpnSetup(id: String) = "vpn_setup/${enc(id)}"
     fun snapshots(dataset: String) = "snapshots/${enc(dataset)}"
@@ -179,7 +179,7 @@ private object Routes {
         return when (t) {
             app.truenascompanion.data.shell.ShellTarget.Host -> "shell/host"
             is app.truenascompanion.data.shell.ShellTarget.App -> "shell/app" + q("app" to t.appName, "ctr" to t.containerId, "cname" to t.containerName, "cmd" to t.command)
-            is app.truenascompanion.data.shell.ShellTarget.Instance -> "shell/instance" + q("id" to t.id, "cmd" to t.command)
+            is app.truenascompanion.data.shell.ShellTarget.Instance -> "shell/instance" + q("id" to t.id, "cmd" to t.command, "api" to if (t.lxc) "lxc" else null)
         }
     }
     fun logs(name: String, container: String?) = "app/${enc(name)}/logs" + (container?.let { "?container=${enc(it)}" } ?: "")
@@ -537,11 +537,11 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
                 pushed(Routes.APP_EDIT, "name") { a ->
                     AppFormScreen(AppFormMode.Edit(a.getValue("name")), onBack = { nav.popBackStack() }, onDone = { nav.backToApps() })
                 }
-                pushed(Routes.SHELL, "kind", "app?", "ctr?", "cname?", "cmd?", "id?") { a ->
+                pushed(Routes.SHELL, "kind", "app?", "ctr?", "cname?", "cmd?", "id?", "api?") { a ->
                     val target = when (a["kind"]) {
                         "app" -> app.truenascompanion.data.shell.ShellTarget.App(a["app"].orEmpty(), a["ctr"].orEmpty(), a["cname"] ?: a["ctr"].orEmpty(),
                             a["cmd"] ?: app.truenascompanion.data.shell.WebShellProtocol.DEFAULT_COMMAND)
-                        "instance" -> app.truenascompanion.data.shell.ShellTarget.Instance(a["id"].orEmpty(), a["cmd"])
+                        "instance" -> app.truenascompanion.data.shell.ShellTarget.Instance(a["id"].orEmpty(), a["cmd"], lxc = a["api"] == "lxc")
                         else -> app.truenascompanion.data.shell.ShellTarget.Host
                     }
                     app.truenascompanion.ui.shell.ShellScreen(target, key = a.entries.sortedBy { it.key }.joinToString("|"), onBack = { nav.popBackStack() })
