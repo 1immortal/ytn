@@ -336,6 +336,27 @@ fun SystemPageScreen(page: SystemPage, onBack: () -> Unit, onEditServer: (String
     val uiScope = rememberCoroutineScope()
     val say: (String) -> Unit = { msg -> uiScope.launch { snackbar.showSnackbar(msg) } }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // 1.12.4: a reboot / shutdown asked for from the watch opens this page with the same confirmation (plus the
+    // "confirm dangerous actions" prompt when it is on). Nothing happens unless it is confirmed here.
+    var fromWatch by remember { mutableStateOf(false) }
+    val dangerGuard = app.truenascompanion.ui.lock.LocalDangerGuard.current
+    if (page == SystemPage.POWER) {
+        val container = (context.applicationContext as app.truenascompanion.TrueNasApp).container
+        val watchRequest by container.watchPowerRequest.collectAsStateWithLifecycle()
+        LaunchedEffect(watchRequest) {
+            val action = watchRequest ?: return@LaunchedEffect
+            container.watchPowerRequest.value = null
+            fromWatch = true
+            confirm = if (action == app.truenascompanion.wearlink.WearLink.POWER_SHUTDOWN) "shutdown" else "reboot"
+        }
+    }
+    val watchNote = if (fromWatch) " Requested from your watch." else ""
+    fun runPower(reboot: Boolean) {
+        val watch = fromWatch
+        confirm = null; fromWatch = false
+        val go: () -> Unit = { if (reboot) vm.reboot() else vm.shutdown() }
+        if (watch) dangerGuard.guard(if (reboot) "Reboot the NAS" else "Shut down the NAS", go) else go()
+    }
 
     Scaffold(
         topBar = {
@@ -399,15 +420,15 @@ fun SystemPageScreen(page: SystemPage, onBack: () -> Unit, onEditServer: (String
     when (confirm) {
         "reboot" -> ConfirmDialog(
             title = "Reboot ${server?.name ?: "server"}?",
-            text = "The NAS will restart now. Apps, shares and VMs will be unavailable for a few minutes.",
+            text = "The NAS will restart now. Apps, shares and VMs will be unavailable for a few minutes.$watchNote",
             confirmLabel = "Reboot", destructive = true, icon = Icons.Rounded.RestartAlt,
-            onConfirm = { confirm = null; vm.reboot() }, onDismiss = { confirm = null },
+            onConfirm = { runPower(reboot = true) }, onDismiss = { confirm = null; fromWatch = false },
         )
         "shutdown" -> ConfirmDialog(
             title = "Shut down ${server?.name ?: "server"}?",
-            text = "The NAS will power off. You will need physical access (or IPMI / Wake-on-LAN) to turn it back on.",
+            text = "The NAS will power off. You will need physical access (or IPMI / Wake-on-LAN) to turn it back on.$watchNote",
             confirmLabel = "Shut down", destructive = true, icon = Icons.Rounded.PowerSettingsNew,
-            onConfirm = { confirm = null; vm.shutdown() }, onDismiss = { confirm = null },
+            onConfirm = { runPower(reboot = false) }, onDismiss = { confirm = null; fromWatch = false },
         )
     }
 }

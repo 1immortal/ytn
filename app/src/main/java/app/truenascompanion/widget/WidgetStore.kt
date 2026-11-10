@@ -51,7 +51,7 @@ object WidgetStore {
         }.getOrElse { WidgetSnapshot(error = "Couldn't read widget data.") }
     }
 
-    fun save(context: Context, snap: WidgetSnapshot) {
+    fun save(context: Context, snap: WidgetSnapshot, wear: app.truenascompanion.wear.WearExtras? = null) {
         val o = JSONObject()
             .put("serverName", snap.serverName)
             .put("poolHealth", snap.poolHealth.name)
@@ -65,7 +65,8 @@ object WidgetStore {
         snap.appsTotal?.let { o.put("appsTotal", it) }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, o.toString()) }
         // 1.12.0: the watch gets the same snapshot (only pushed when a watch with YTN is connected).
-        runCatching { (context.applicationContext as? app.truenascompanion.TrueNasApp)?.container?.wear?.onSnapshot(snap) }
+        // 1.12.4: plus alert titles and CPU/RAM/temperature when the refresh read them for a connected watch.
+        runCatching { (context.applicationContext as? app.truenascompanion.TrueNasApp)?.container?.wear?.onSnapshot(snap, extras = wear) }
         // 1.2.0: the status tile shows the same data; ask the system to refresh it if it's in the shade.
         runCatching {
             android.service.quicksettings.TileService.requestListeningState(context, android.content.ComponentName(context, app.truenascompanion.quick.StatusTileService::class.java))

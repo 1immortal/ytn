@@ -82,7 +82,25 @@ fun StatusDot(color: Int, label: String, size: Int = 14) {
     Box(Modifier.size(size.dp).background(Color(color), CircleShape).semantics { contentDescription = label })
 }
 
-/** The main screen: health, pools, alerts, CPU/temperature, then Refresh / Alerts / Wake. */
+/**
+ * 1.12.4 (issue #12): what the alert list says above (or instead of) the titles, or null. The phone now sends titles
+ * with every refresh, but an older phone app (or a status from before the update) can still have a count without them.
+ */
+fun alertListNote(s: WearStatus): String? = when {
+    s.alertsHidden -> "Alert details are hidden on the watch (phone privacy setting). Open YTN on your phone to read them."
+    s.alertCount > 0 && s.alerts.isEmpty() -> "Open YTN on your phone, or tap Refresh, to load the alert details."
+    s.alertCount > s.alerts.size && s.alerts.isNotEmpty() -> "Showing ${s.alerts.size} of ${s.alertCount}. The rest are on your phone."
+    else -> null
+}
+
+/** 1.12.4: what the power confirmation says (pure). */
+fun powerQuestion(action: String, serverName: String?): Pair<String, String> {
+    val name = serverName ?: "the NAS"
+    return if (action == app.truenascompanion.wearlink.WearLink.POWER_SHUTDOWN) "Shut down $name?" to "Turning it on again needs Wake-on-LAN or physical access. Your phone asks again."
+    else "Reboot $name?" to "Apps and shares stop for a few minutes. Your phone asks again."
+}
+
+/** The main screen: health, pools, alerts, CPU/RAM/temperature, then Alerts / Refresh / Wake / Power. */
 @Composable
 fun StatusScreen(
     s: WearStatus,
@@ -91,6 +109,7 @@ fun StatusScreen(
     onAlerts: () -> Unit,
     onWake: () -> Unit,
     now: Long = System.currentTimeMillis(),
+    onPower: () -> Unit = {},
 ) {
     val state = rememberScalingLazyListState()
     ScalingLazyColumn(
@@ -108,10 +127,9 @@ fun StatusScreen(
         }
         item { Text(WearColors.healthWord(s), style = MaterialTheme.typography.displaySmall, color = Color(WearColors.of(s))) }
         item { Text(s.summary(), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp)) }
-        if (s.online && (s.cpuPercent != null || s.tempC != null)) item {
-            Text(listOfNotNull(s.cpuPercent?.let { "CPU $it%" }, s.tempC?.let { "Disks $it °C" }).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        s.statsLine("Disks\u00A0")?.let { line -> item {
+            Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp))
+        } }
         (message ?: s.wakeLabel)?.let { m -> item { Text(m, style = MaterialTheme.typography.bodySmall, color = Color(WearColors.ACCENT), textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp)) } }
         item {
             Button(onClick = onAlerts, modifier = Modifier.fillMaxWidth(), label = { Text(if (s.alertCount == 0) "Alerts" else "Alerts (${s.alertCount})") })
@@ -121,6 +139,9 @@ fun StatusScreen(
         }
         if (s.canWake) item {
             Button(onClick = onWake, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.filledTonalButtonColors(), label = { Text("Wake NAS") })
+        }
+        if (s.canPower && s.online) item {
+            Button(onClick = onPower, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(), label = { Text("Power") })
         }
         item { Text(updatedText(s.updatedAt, now), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 24.dp)) }
     }
@@ -135,10 +156,9 @@ fun AlertListScreen(s: WearStatus, onAck: (WearAlert) -> Unit, onBack: () -> Uni
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         item { ListHeader { Text(if (s.alertCount == 0) "No alerts" else "${s.alertCount} alert${if (s.alertCount == 1) "" else "s"}") } }
-        if (s.alertsHidden) item {
-            Text("Alert details are hidden on the watch (phone privacy setting). Open YTN on your phone to read them.",
-                style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp))
-        }
+        alertListNote(s)?.let { note -> item {
+            Text(note, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp))
+        } }
         s.alerts.forEach { a ->
             item(key = a.id) {
                 Button(
@@ -166,6 +186,49 @@ fun AckConfirmScreen(a: WearAlert, onConfirm: () -> Unit, onCancel: () -> Unit) 
         Text("Acknowledge on phone?", style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
         Spacer(Modifier.size(4.dp))
         Text(a.title, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.size(8.dp))
+        Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth(), label = { Text("Send to phone") })
+        Spacer(Modifier.size(4.dp))
+        Button(onClick = onCancel, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(), label = { Text("Cancel") })
+    }
+}
+
+/** 1.12.4: emergency Reboot / Shut down. Each asks on the watch, then the phone asks again before anything happens. */
+@Composable
+fun PowerScreen(s: WearStatus, onReboot: () -> Unit, onShutdown: () -> Unit, onBack: () -> Unit) {
+    val state = rememberScalingLazyListState()
+    ScalingLazyColumn(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        state = state,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        item { ListHeader { Text("Power") } }
+        item {
+            Text("${s.serverName ?: "NAS"}: you confirm on your phone.", style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp))
+        }
+        item { Button(onClick = onReboot, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.filledTonalButtonColors(), label = { Text("Reboot") }) }
+        item {
+            Button(onClick = onShutdown, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(WearColors.CRITICAL), contentColor = Color.Black), label = { Text("Shut down") })
+        }
+        item { Button(onClick = onBack, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(), label = { Text("Back") }) }
+        item { Spacer(Modifier.size(24.dp)) }
+    }
+}
+
+@Composable
+fun PowerConfirmScreen(action: String, serverName: String?, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    val (title, text) = powerQuestion(action, serverName)
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.size(4.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, maxLines = 4, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.size(8.dp))
         Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth(), label = { Text("Send to phone") })
         Spacer(Modifier.size(4.dp))

@@ -250,6 +250,14 @@ fun PhoneAlertsSettings(server: ServerConfig?, onMessage: (String) -> Unit, onRu
         checked = watchTitles,
         onChange = { watchTitles = it; container.wear.showTitles = it },
     )
+    // 1.12.4: emergency reboot / shut down from the watch; every request is still confirmed on the phone.
+    var watchPower by remember { mutableStateOf(container.wear.powerFromWatch) }
+    app.truenascompanion.ui.components.SwitchRow(
+        label = "Reboot and shut down from the watch",
+        supporting = "Show Reboot and Shut down in the YTN watch app. Nothing happens until you confirm it on this phone.",
+        checked = watchPower,
+        onChange = { watchPower = it; container.wear.powerFromWatch = it },
+    )
     }
 }
 

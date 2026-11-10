@@ -50,6 +50,8 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
                 val alerts = runCatching { api.alerts().filter { !it.dismissed } }.getOrDefault(emptyList())
                 // 1.10.0: apps only when the dashboard widget is placed (one extra read-only call).
                 val apps = if (placed(applicationContext, DashboardWidgetReceiver::class.java)) runCatching { api.apps() }.getOrNull() else null
+                // 1.12.4 (issue #12): alert titles and CPU/RAM/temperature for the watch, only while one is connected.
+                val wear = runCatching { app.truenascompanion.wear.WatchRefresh.extras(c, server, api, alerts) }.getOrNull()
                 val worst = pools.map { it.health }.minByOrNull { rank(it) } ?: Health.UNKNOWN
                 val label = when {
                     pools.isEmpty() -> "No pools"
@@ -74,6 +76,7 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
                         appsRunning = apps?.count { it.state == app.truenascompanion.data.model.AppState.RUNNING },
                         appsTotal = apps?.size,
                     ),
+                    wear = wear,
                 )
             } finally {
                 api.close()

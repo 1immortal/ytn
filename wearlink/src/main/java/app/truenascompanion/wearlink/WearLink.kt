@@ -9,7 +9,9 @@ import kotlinx.serialization.json.Json
  * - The phone puts [WearStatus] as a DataItem at [STATUS_PATH] whenever its existing checks run (widget refresh,
  *   phone-alert check). The watch never talks to the NAS and never holds credentials.
  * - The watch sends messages: [MSG_REFRESH] (ask the phone to refresh), [MSG_WAKE] (Wake-on-LAN through the phone),
- *   [MSG_ACK] with an alert id (the phone shows a confirmation; nothing is acknowledged without the phone).
+ *   [MSG_ACK] with an alert id (the phone shows a confirmation; nothing is acknowledged without the phone),
+ *   [MSG_POWER] with [POWER_REBOOT] or [POWER_SHUTDOWN] (1.12.4; the phone asks for confirmation, and the NAS is only
+ *   rebooted or shut down after it is confirmed on the phone).
  * - [CAPABILITY_WATCH] is declared by the watch app (res/values/wear.xml) so the phone only pushes when a watch with
  *   YTN is connected.
  */
@@ -18,10 +20,17 @@ object WearLink {
     const val MSG_REFRESH = "/ytn/refresh"
     const val MSG_WAKE = "/ytn/wake"
     const val MSG_ACK = "/ytn/ack"
+    /** 1.12.4: emergency reboot / shutdown request; the payload is [POWER_REBOOT] or [POWER_SHUTDOWN]. */
+    const val MSG_POWER = "/ytn/power"
+    const val POWER_REBOOT = "reboot"
+    const val POWER_SHUTDOWN = "shutdown"
     const val CAPABILITY_WATCH = "ytn_watch"
     const val CAPABILITY_PHONE = "ytn_phone"
     const val KEY_JSON = "json"
-    /** Format version; a watch that sees a newer one says "Update YTN on the watch". */
+    /**
+     * Format version; a watch that sees a newer one says "Update YTN on the watch". 1.12.4 only added optional fields
+     * with defaults ([WearStatus.ramPercent], [WearStatus.canPower]), so it stays 1: older watches ignore them.
+     */
     const val VERSION = 1
     /** Never send more alerts than this (Data Layer items should stay small). */
     const val MAX_ALERTS = 20
@@ -57,6 +66,7 @@ data class WearStatus(
     val poolsTotal: Int = 0,
     val alertCount: Int = 0,
     val cpuPercent: Int? = null,
+    /** Highest disk temperature (lowest reading of each disk over the last minutes, then the hottest disk). */
     val tempC: Int? = null,
     val online: Boolean = false,
     /** Short reason when offline ("Offline", "Sign in needed"). */
@@ -70,7 +80,18 @@ data class WearStatus(
     /** "Waking…" / "Online" from the phone's wake controller, or null. */
     val wakeLabel: String? = null,
     val updatedAt: Long = 0L,
+    /** 1.12.4: memory used by services (without the ZFS cache), in percent of RAM. */
+    val ramPercent: Int? = null,
+    /** 1.12.4: the phone allows reboot / shut down requests from the watch (each one is confirmed on the phone). */
+    val canPower: Boolean = false,
 ) {
+    /** "CPU 3% · RAM 41% · 38 °C" (non-breaking space before °C; only what is known; null when nothing is or offline). */
+    fun statsLine(tempPrefix: String = ""): String? = listOfNotNull(
+        cpuPercent?.let { "CPU $it%" },
+        ramPercent?.let { "RAM $it%" },
+        tempC?.let { "$tempPrefix$it\u00A0°C" },
+    ).joinToString(" · ").takeIf { online && it.isNotEmpty() }
+
     /** What a complication or tile title shows in a few characters. */
     fun shortText(): String = when {
         serverName == null -> "—"

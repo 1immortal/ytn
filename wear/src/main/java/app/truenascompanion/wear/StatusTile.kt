@@ -17,7 +17,8 @@ import app.truenascompanion.wearlink.WearStatus
 import com.google.common.util.concurrent.ListenableFuture
 
 /**
- * Status tile: health dot and word, server name, "2 pools healthy · 1 alert", CPU and disk temperature, updated time.
+ * Status tile: health dot and word, server name, "2 pools healthy · 1 alert", CPU, RAM (1.12.4) and disk temperature,
+ * updated time.
  * Tapping it opens the app. It is refreshed when the phone sends a new status (no polling on the watch).
  */
 class StatusTileService : TileService() {
@@ -56,7 +57,7 @@ object StatusTileLayout {
         s.serverName ?: "YTN",
         WearColors.healthWord(s),
         s.summary(),
-        listOfNotNull(s.cpuPercent?.let { "CPU $it%" }, s.tempC?.let { "$it °C" }).joinToString(" · ").takeIf { s.online && it.isNotEmpty() },
+        s.statsLine(),
         updatedText(s.updatedAt, now),
     )
 

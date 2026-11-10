@@ -97,6 +97,8 @@ class AppContainer(app: Application) {
         val target = all.firstOrNull { it.id == (id ?: settings.activeServerId.first()) } ?: all.firstOrNull()
         return target?.let { wake.wake(it) } == true
     }
+    /** 1.12.4: "reboot" / "shutdown" asked for from the watch; System › Power shows its confirmation, then clears it. */
+    val watchPowerRequest = MutableStateFlow<String?>(null)
     /** 1.12.0: status snapshot for the Wear OS app (Data Layer; only when the watch app is installed). */
     val wear = WearBridge(app, appScope)
 
@@ -104,9 +106,9 @@ class AppContainer(app: Application) {
     fun startWear() {
         alertChecker.afterCheck = { server, alerts, titles, data ->
             if (server.id == settings.activeServerId.first() && wear.watchConnected()) {
-                val cpu = data.cpuAverage(5)?.toInt()
-                val temp = data.diskTempLowest(10)?.values?.maxOrNull()?.toInt()
-                wear.onChecked(server.name.ifBlank { server.displayHost }, alerts, titles, cpu, temp)
+                // 1.12.4: RAM too, with the same rounding as the widget-refresh path.
+                val st = app.truenascompanion.wear.WatchRefresh.stats(data)
+                wear.onChecked(server.name.ifBlank { server.displayHost }, alerts, titles, st.cpu, st.temp, st.ram)
             }
         }
         appScope.launch {

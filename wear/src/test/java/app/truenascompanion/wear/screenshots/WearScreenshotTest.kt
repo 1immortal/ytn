@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import app.truenascompanion.wear.AlertListScreen
+import app.truenascompanion.wear.PowerConfirmScreen
+import app.truenascompanion.wear.PowerScreen
 import app.truenascompanion.wear.StatusScreen
 import app.truenascompanion.wear.StatusTileLayout
 import app.truenascompanion.wear.WearColors
@@ -49,7 +51,7 @@ class WearScreenshotTest {
     private val now = System.currentTimeMillis()
     private val status = WearStatus(
         serverName = "homenas", health = WearHealth.WARNING, poolsHealthy = 2, poolsTotal = 2, alertCount = 2,
-        cpuPercent = 3, tempC = 38, online = true, canWake = true, updatedAt = now - 4 * 60_000,
+        cpuPercent = 3, ramPercent = 41, tempC = 38, online = true, canWake = true, canPower = true, updatedAt = now - 4 * 60_000,
         alerts = listOf(WearAlert("1", "WARNING", "3 app updates available"), WearAlert("2", "INFO", "Scrub finished on tank")),
     )
 
@@ -68,6 +70,13 @@ class WearScreenshotTest {
     @Test fun app() = shot("app") { StatusScreen(status, null, {}, {}, {}, now) }
 
     @Test fun alerts() = shot("alerts") { AlertListScreen(status, {}, {}) }
+
+    // 1.12.4 (issue #12)
+    @Test fun alertsWithoutTitles() = shot("alerts_no_titles") { AlertListScreen(status.copy(alerts = emptyList()), {}, {}) }
+
+    @Test fun power() = shot("power") { PowerScreen(status, {}, {}, {}) }
+
+    @Test fun powerConfirm() = shot("power_confirm") { PowerConfirmScreen(app.truenascompanion.wearlink.WearLink.POWER_SHUTDOWN, status.serverName, {}, {}) }
 
     @Test fun tile() = shot("tile") {
         val l = StatusTileLayout.lines(status, now)

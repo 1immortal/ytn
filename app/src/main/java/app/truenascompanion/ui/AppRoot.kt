@@ -245,6 +245,12 @@ private fun AppContent(container: app.truenascompanion.AppContainer, list: List<
             DeepLink.DEST_RULES -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.ALERT_RULES) }
             DeepLink.DEST_TASKS -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.JOBS) }
             DeepLink.DEST_BACKUP -> { nav.switchTab(Tab.SYSTEM.route); nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.BACKUP)) }
+            // 1.12.4: from a watch request; only signed links get here, and only for a few minutes (WatchPower.parseArg).
+            DeepLink.DEST_WATCH_POWER -> app.truenascompanion.wear.WatchPower.parseArg(link.arg, System.currentTimeMillis())?.let { action ->
+                container.watchPowerRequest.value = action
+                nav.switchTab(Tab.SYSTEM.route)
+                nav.navigate(Routes.systemPage(app.truenascompanion.ui.system.SystemPage.POWER))
+            }
             DeepLink.DEST_WAKE_SETUP -> (link.serverId ?: container.repository.activeServer.value?.id ?: list.firstOrNull()?.id)?.let { nav.navigate(Routes.wake(it)) }
             DeepLink.DEST_CHECKUP -> { container.storageTabRequest.value = app.truenascompanion.ui.storage.StorageTabs.PROTECTION; nav.switchTab(Tab.STORAGE.route); nav.navigate(Routes.CHECKUP) }
             DeepLink.DEST_SHELL, DeepLink.DEST_RESTART_APP, DeepLink.DEST_SCRUB_POOL ->
