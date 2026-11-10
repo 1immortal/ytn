@@ -33,12 +33,33 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
         get() = prefs.getBoolean(KEY_TITLES, true)
         set(v) { prefs.edit { putBoolean(KEY_TITLES, v) } }
 
+    /**
+     * 1.12.4: System › Phone alerts › "Reboot and shut down from the watch" (on by default). Each request is still
+     * confirmed on the phone ([WatchPower]); with this off the watch hides the buttons and the phone ignores requests.
+     */
+    var powerFromWatch: Boolean
+        get() = prefs.getBoolean(KEY_POWER, true)
+        set(v) { prefs.edit { putBoolean(KEY_POWER, v) }; update { it } }
+
     fun current(): WearStatus = WearLink.decode(prefs.getString(KEY_STATUS, null)?.toByteArray()) ?: WearStatus()
 
-    fun onSnapshot(s: WidgetSnapshot, canWake: Boolean? = null) = update { WearPolicy.fromSnapshot(it, s, canWake) }
+    /**
+     * Widget refresh. 1.12.4 (issue #12): with [extras] (read only while a watch is connected) the same refresh also
+     * carries the alert titles and CPU/RAM/temperature, so the watch's alert list always matches its count, even when
+     * phone alerts are off or haven't run yet.
+     */
+    fun onSnapshot(s: WidgetSnapshot, canWake: Boolean? = null, extras: WearExtras? = null) = update { prev ->
+        WearPolicy.fromRefresh(prev, s, canWake, extras, extras != null && titlesAllowed())
+    }
 
-    fun onChecked(serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?) = update {
-        WearPolicy.withAlerts(it, serverName, alerts, titles, cpu, temp, showTitles && WearPolicy.systemAllowsPrivate(context))
+    /** Alert class titles per server for the watch's widget-refresh path (fetched once per process, like the alert check). */
+    val classTitles = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
+
+    /** True when alert titles may go to the watch at all (setting and lock-screen privacy). */
+    fun titlesAllowed(): Boolean = showTitles && WearPolicy.systemAllowsPrivate(context)
+
+    fun onChecked(serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, ram: Int? = null) = update {
+        WearPolicy.withAlerts(it, serverName, alerts, titles, cpu, temp, titlesAllowed(), ram)
     }
 
     fun onWake(label: String?, canWake: Boolean) = update { it.copy(wakeLabel = label, canWake = canWake) }
@@ -47,7 +68,7 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
         scope.launch(Dispatchers.IO) {
             lock.withLock {
                 val before = current()
-                val next = transform(before)
+                val next = transform(before).copy(canPower = powerFromWatch)
                 if (next == before) return@withLock
                 prefs.edit { putString(KEY_STATUS, WearLink.encode(next).toString(Charsets.UTF_8)) }
                 runCatching { if (transport.watchReachable()) transport.put(WearLink.STATUS_PATH, WearLink.encode(next), urgent = next.alertCount != before.alertCount) }
@@ -83,9 +104,19 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
         private const val PREFS = "wear_bridge"
         private const val KEY_STATUS = "status"
         private const val KEY_TITLES = "titles"
+        private const val KEY_POWER = "power"
         private const val RESEND_GAP_MS = 60_000L
     }
 }
+
+/** 1.12.4: what the widget refresh read for the watch (only while one is connected). */
+data class WearExtras(
+    val alerts: List<AlertItem>,
+    val titles: Map<String, String>,
+    val cpu: Int?,
+    val ram: Int?,
+    val temp: Int?,
+)
 
 /** How [WearStatus] is built (pure, unit tested). */
 object WearPolicy {
@@ -106,16 +137,29 @@ object WearPolicy {
             poolsTotal = s.pools.size,
             poolsHealthy = s.pools.count { it.health == Health.HEALTHY || it.health == Health.INFO },
             alertCount = if (s.error != null && sameServer) prev.alertCount else s.alertCount,
-            alerts = if (sameServer) prev.alerts else emptyList(),
+            // 1.12.4: no open alerts means no (stale) titles either.
+            alerts = if (!sameServer || (s.error == null && s.alertCount == 0)) emptyList() else prev.alerts,
+            alertsHidden = if (!sameServer || (s.error == null && s.alertCount == 0)) false else prev.alertsHidden,
             cpuPercent = if (sameServer) prev.cpuPercent else null,
+            ramPercent = if (sameServer) prev.ramPercent else null,
             tempC = if (sameServer) prev.tempC else null,
             canWake = canWake ?: prev.canWake,
             updatedAt = s.updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
         )
     }
 
-    /** Alerts from the phone-alert check: open ones, worst first, at most [WearLink.MAX_ALERTS], titles only. */
-    fun withAlerts(prev: WearStatus, serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, showTitles: Boolean): WearStatus {
+    /** 1.12.4: the widget refresh, plus (while a watch is connected) its alert titles and stats in the same update. */
+    fun fromRefresh(prev: WearStatus, s: WidgetSnapshot, canWake: Boolean?, extras: WearExtras?, showTitles: Boolean): WearStatus {
+        val base = fromSnapshot(prev, s, canWake)
+        if (extras == null || s.error != null || s.serverName == null) return base
+        return withAlerts(base, s.serverName, extras.alerts, extras.titles, extras.cpu, extras.temp, showTitles, extras.ram).copy(updatedAt = base.updatedAt)
+    }
+
+    /**
+     * Alerts from the phone-alert check or (1.12.4) the widget refresh: open ones, worst first, at most
+     * [WearLink.MAX_ALERTS], titles only. [titles] maps alert uuids to titles; missing ones fall back to the class.
+     */
+    fun withAlerts(prev: WearStatus, serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, showTitles: Boolean, ram: Int? = null): WearStatus {
         val open = alerts.filter { !it.dismissed }.sortedBy { rank(it.level) }
         return prev.copy(
             serverName = serverName,
@@ -125,6 +169,7 @@ object WearPolicy {
             alerts = if (showTitles) open.take(WearLink.MAX_ALERTS).map { WearAlert(it.uuid, it.level.uppercase(), (titles[it.uuid] ?: it.klass ?: "Alert").take(80)) } else emptyList(),
             alertsHidden = !showTitles && open.isNotEmpty(),
             cpuPercent = cpu ?: prev.cpuPercent,
+            ramPercent = ram ?: prev.ramPercent,
             tempC = temp ?: prev.tempC,
             updatedAt = System.currentTimeMillis(),
         )

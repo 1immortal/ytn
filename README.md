@@ -86,7 +86,7 @@ Want the full list? See **[everything YTN can do](docs/FEATURES.md)**.
 2. Open the downloaded file. Android asks you to allow **Install unknown apps** for your browser or file manager. Allow it, go back, then tap **Install**.
 3. That's it. YTN lets you know when there's a new version (System › About) and installs it over the old one, keeping your settings.
 
-You need Android 8.0 or newer and TrueNAS 25.04 or newer. TrueNAS 25.10 is fully supported. **TrueNAS 27** is still a release candidate: YTN 1.12.3 can list, start, stop, restart, delete and open a shell in its new containers, but treat that as experimental until 27 is final.
+You need Android 8.0 or newer and TrueNAS 25.04 or newer. TrueNAS 25.10 is fully supported. **TrueNAS 27** is still a release candidate: YTN 1.12.3 and newer can list, start, stop, restart, delete and open a shell in its new containers, but treat that as experimental until 27 is final.
 
 **Updating from TrueNAS Companion?** Nothing to do: update from inside the app or install the new file over it. The app is now called **YTN** on your home screen, with a new icon.
 
@@ -101,7 +101,7 @@ You need Android 8.0 or newer and TrueNAS 25.04 or newer. TrueNAS 25.10 is fully
 
 ### On your watch (Wear OS)
 
-The watch app shows your NAS's health, a tile, a complication and your alerts. It gets everything from YTN on your phone, so it never needs your NAS password. You need a Wear OS 3+ watch paired with the phone, **Google Play services on both** (the phone and watch talk through it), and YTN 1.12 or newer on the phone.
+The watch app shows your NAS's health, CPU, memory and disk temperature, a tile, a complication and your alerts. In an emergency you can also reboot or shut down the NAS from the watch: your phone always asks you to confirm first, and you can turn this off in System › Phone alerts. It gets everything from YTN on your phone, so it never needs your NAS password. You need a Wear OS 3+ watch paired with the phone, **Google Play services on both** (the phone and watch talk through it), and YTN 1.12 or newer on the phone.
 
 The watch app isn't on the Play Store, so install it once from a computer:
 

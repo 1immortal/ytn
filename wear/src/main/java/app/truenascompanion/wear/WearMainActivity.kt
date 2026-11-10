@@ -16,7 +16,10 @@ import app.truenascompanion.wearlink.WearLink
 import app.truenascompanion.wearlink.WearStatus
 import kotlinx.coroutines.launch
 
-/** The glanceable app: status, alerts (acknowledge goes through the phone) and Wake-on-LAN through the phone. */
+/**
+ * The glanceable app: status, alerts (acknowledge goes through the phone), Wake-on-LAN and (1.12.4) reboot / shut down,
+ * all through the phone, which confirms ack and power before anything happens.
+ */
 class WearMainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +29,7 @@ class WearMainActivity : ComponentActivity() {
             val s = status ?: WearStatus()
             var screen by rememberSaveable { mutableStateOf("status") }
             var ackId by rememberSaveable { mutableStateOf<String?>(null) }
+            var powerAction by rememberSaveable { mutableStateOf<String?>(null) }
             var message by rememberSaveable { mutableStateOf<String?>(null) }
             val scope = rememberCoroutineScope()
             fun send(path: String, data: ByteArray = ByteArray(0), ok: String) = scope.launch {
@@ -35,18 +39,27 @@ class WearMainActivity : ComponentActivity() {
                     PhoneLink.Result.FAILED -> "Couldn't reach the phone"
                 }
             }
-            BackHandler(enabled = screen != "status") { screen = if (screen == "ack") "alerts" else "status" }
+            BackHandler(enabled = screen != "status") { screen = when (screen) { "ack" -> "alerts"; "power_confirm" -> "power"; else -> "status" } }
             MaterialTheme {
                 val ack = ackId?.let { id -> s.alerts.firstOrNull { it.id == id } }
                 when {
                     screen == "ack" && ack != null -> AckConfirmScreen(ack,
                         onConfirm = { send(WearLink.MSG_ACK, ack.id.toByteArray(), "Confirm on your phone"); screen = "status" },
                         onCancel = { screen = "alerts" })
+                    // 1.12.4: emergency reboot / shut down; the phone confirms before anything happens.
+                    screen == "power_confirm" && powerAction != null && s.canPower -> PowerConfirmScreen(powerAction!!, s.serverName,
+                        onConfirm = { send(WearLink.MSG_POWER, powerAction!!.toByteArray(), "Confirm on your phone"); screen = "status" },
+                        onCancel = { screen = "power" })
+                    screen == "power" && s.canPower -> PowerScreen(s,
+                        onReboot = { powerAction = WearLink.POWER_REBOOT; screen = "power_confirm" },
+                        onShutdown = { powerAction = WearLink.POWER_SHUTDOWN; screen = "power_confirm" },
+                        onBack = { screen = "status" })
                     screen == "alerts" -> AlertListScreen(s, onAck = { ackId = it.id; screen = "ack" }, onBack = { screen = "status" })
                     else -> StatusScreen(s, message,
                         onRefresh = { send(WearLink.MSG_REFRESH, ok = "Refreshing on the phone…") },
                         onAlerts = { screen = "alerts" },
-                        onWake = { send(WearLink.MSG_WAKE, ok = "Waking… (up to ~2 min)") })
+                        onWake = { send(WearLink.MSG_WAKE, ok = "Waking… (up to ~2 min)") },
+                        onPower = { screen = "power" })
                 }
             }
         }

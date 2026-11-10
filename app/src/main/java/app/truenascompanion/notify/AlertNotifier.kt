@@ -57,6 +57,8 @@ object DeepLink {
     const val DEST_CHECKUP = "checkup"
     /** 1.12.0: Wake-on-LAN setup of the active (or given) server. */
     const val DEST_WAKE_SETUP = "wake_setup"
+    /** 1.12.4: reboot / shut down requested from the watch; arg = [app.truenascompanion.wear.WatchPower.arg] (signed only). */
+    const val DEST_WATCH_POWER = "watch_power"
 }
 
 /** Builds and posts all app notifications (alerts, sign-in reminder, test, instant-mode service). */
@@ -361,13 +363,13 @@ class AlertNotifier(private val context: Context) {
 
     /** 1.11.0: a Tasker plugin asked to open [target] (a screen or a quick action's confirmation). */
     @SuppressLint("MissingPermission")
-    fun postAutomationPrompt(title: String, target: Intent) {
+    fun postAutomationPrompt(title: String, target: Intent, subText: String = "Automation") {
         if (!canPost()) return
         val pi = PendingIntent.getActivity(context, ID_AUTOMATION, target, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = base(CH_AUTOMATION)
             .setContentTitle(title)
             .setContentText("Tap to continue in YTN")
-            .setSubText("Automation")
+            .setSubText(subText)
             .setAutoCancel(true)
             .setTimeoutAfter(5 * 60_000L)
             .setContentIntent(pi)
