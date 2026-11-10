@@ -56,6 +56,25 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
         }
     }
 
+    @Volatile private var lastResendMs = 0L
+
+    /**
+     * 1.12.3 (issue #12): opening the phone app sends the last status once (at most once a minute), so a watch that
+     * connected since the last change gets it without waiting for the next one. Same reachability check as [update].
+     */
+    fun resend(nowMs: Long = System.currentTimeMillis()) {
+        if (nowMs - lastResendMs < RESEND_GAP_MS) return
+        lastResendMs = nowMs
+        scope.launch(Dispatchers.IO) {
+            lock.withLock {
+                val s = current()
+                if (s.serverName == null) return@withLock
+                runCatching { if (transport.watchReachable()) transport.put(WearLink.STATUS_PATH, WearLink.encode(s), urgent = false) }
+                    .onFailure { Log.i(TAG, "watch resend skipped: ${it.message}") }
+            }
+        }
+    }
+
     /** True when a watch with YTN is connected (used to decide whether CPU/temperature are worth reading). */
     suspend fun watchConnected(): Boolean = runCatching { transport.watchReachable() }.getOrDefault(false)
 
@@ -64,6 +83,7 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
         private const val PREFS = "wear_bridge"
         private const val KEY_STATUS = "status"
         private const val KEY_TITLES = "titles"
+        private const val RESEND_GAP_MS = 60_000L
     }
 }
 

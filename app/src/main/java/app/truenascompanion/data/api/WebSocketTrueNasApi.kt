@@ -482,7 +482,10 @@ class WebSocketTrueNasApi internal constructor(private val rpc: JsonRpcClient) :
             ?.filterNot { id -> id.contains("/ix-") || id.contains("/.") || id.substringAfter('/', "").startsWith("ix-") }
             ?: emptyList()
 
-    override suspend fun containersState(): String? = call("virt.global.config").obj()?.str("state")
+    /** 1.12.3 (issue #12): `virt.*` (25.10) or `container.*` (27), detected once per connection. */
+    private val containers = Containers(this)
+
+    override suspend fun containersState(): String? = containers.state()
 
     override suspend fun shellToken(): String =
         (call("auth.generate_token", JsonPrimitive(300), JsonObject(emptyMap()), JsonPrimitive(true), JsonPrimitive(true)) as? JsonPrimitive)
@@ -497,15 +500,12 @@ class WebSocketTrueNasApi internal constructor(private val rpc: JsonRpcClient) :
             (v.obj()?.get("service_name") as? JsonPrimitive)?.contentOrNull ?: id.take(12)
         } ?: emptyMap()
 
-    override suspend fun virtInstances(): List<app.truenascompanion.data.model.VirtInstance> =
-        call("virt.instance.query").arr()?.mapNotNull { it.obj()?.let(Parsers::virtInstance) }?.sortedBy { it.name.lowercase() } ?: emptyList()
+    override suspend fun virtInstances(): List<app.truenascompanion.data.model.VirtInstance> = containers.instances()
 
-    override suspend fun startVirtStart(id: String): Long = startJob("virt.instance.start", p(id))
-    override suspend fun startVirtStop(id: String, force: Boolean): Long =
-        startJob("virt.instance.stop", p(id), buildJsonObject { put("timeout", if (force) -1 else 60); put("force", force) })
-    override suspend fun startVirtRestart(id: String): Long =
-        startJob("virt.instance.restart", p(id), buildJsonObject { put("timeout", 60); put("force", false) })
-    override suspend fun startVirtDelete(id: String): Long = startJob("virt.instance.delete", p(id))
+    override suspend fun startVirtStart(inst: app.truenascompanion.data.model.VirtInstance): Long? = containers.start(inst)
+    override suspend fun startVirtStop(inst: app.truenascompanion.data.model.VirtInstance, force: Boolean): Long? = containers.stop(inst, force)
+    override suspend fun startVirtRestart(inst: app.truenascompanion.data.model.VirtInstance): Long? = containers.restart(inst)
+    override suspend fun startVirtDelete(inst: app.truenascompanion.data.model.VirtInstance): Long? = containers.delete(inst)
 
     override fun appLogs(appName: String, containerId: String, tail: Int): Flow<LogLine> =
         eventSource("app.container_log_follow", buildJsonObject {
