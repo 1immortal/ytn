@@ -29,7 +29,7 @@ object WearLink {
     const val KEY_JSON = "json"
     /**
      * Format version; a watch that sees a newer one says "Update YTN on the watch". 1.12.4 only added optional fields
-     * with defaults ([WearStatus.ramPercent], [WearStatus.canPower]), so it stays 1: older watches ignore them.
+     * with defaults ([WearStatus.ramPercent], [WearStatus.canPower], 1.12.5 [WearStatus.cpuTempC]), so it stays 1: older watches ignore them.
      */
     const val VERSION = 1
     /** Never send more alerts than this (Data Layer items should stay small). */
@@ -84,13 +84,28 @@ data class WearStatus(
     val ramPercent: Int? = null,
     /** 1.12.4: the phone allows reboot / shut down requests from the watch (each one is confirmed on the phone). */
     val canPower: Boolean = false,
+    /** 1.12.5: CPU temperature, sent only when no disk reports a temperature ([tempC] is null then). */
+    val cpuTempC: Int? = null,
 ) {
-    /** "CPU 3% · RAM 41% · 38 °C" (non-breaking space before °C; only what is known; null when nothing is or offline). */
+    /**
+     * "CPU 3% · RAM 41% · 38 °C" (non-breaking space before °C; only what is known; null when nothing is or offline).
+     * 1.12.5: without a disk temperature, the CPU temperature joins the CPU part: "CPU 16%, 45 °C · RAM 50%".
+     */
     fun statsLine(tempPrefix: String = ""): String? = listOfNotNull(
-        cpuPercent?.let { "CPU $it%" },
+        cpuPart(),
         ramPercent?.let { "RAM $it%" },
         tempC?.let { "$tempPrefix$it\u00A0°C" },
     ).joinToString(" · ").takeIf { online && it.isNotEmpty() }
+
+    private fun cpuPart(): String? {
+        val cpuTemp = cpuTempC?.takeIf { tempC == null }?.let { "$it\u00A0°C" }
+        return when {
+            cpuPercent != null && cpuTemp != null -> "CPU $cpuPercent%, $cpuTemp"
+            cpuPercent != null -> "CPU $cpuPercent%"
+            cpuTemp != null -> "CPU $cpuTemp"
+            else -> null
+        }
+    }
 
     /** What a complication or tile title shows in a few characters. */
     fun shortText(): String = when {

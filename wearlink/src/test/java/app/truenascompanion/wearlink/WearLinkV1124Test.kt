@@ -49,4 +49,20 @@ class WearLinkV1124Test {
         assertEquals("/ytn/power", WearLink.MSG_POWER)
         assertTrue(WearLink.POWER_REBOOT != WearLink.POWER_SHUTDOWN)
     }
+
+    // 1.12.5 (issue #12)
+    @Test fun cpuTemperatureFallbackLabel() {
+        val s = WearStatus(serverName = "nas", online = true, cpuPercent = 16, ramPercent = 50, cpuTempC = 45)
+        assertEquals("CPU 16%, 45\u00A0°C · RAM 50%", s.statsLine())
+        assertEquals("CPU 45\u00A0°C · RAM 50%", s.copy(cpuPercent = null).statsLine())
+        // A disk temperature wins; the CPU one isn't repeated.
+        assertEquals("CPU 16% · RAM 50% · Disks\u00A038\u00A0°C", s.copy(tempC = 38).statsLine("Disks\u00A0"))
+        assertNull(s.copy(online = false).statsLine())
+    }
+
+    @Test fun cpuTempFieldIsOptional() {
+        assertNull(WearLink.decode("""{"version":1,"serverName":"x","online":true,"tempC":40}""".toByteArray())!!.cpuTempC)
+        val s = WearStatus(serverName = "x", online = true, cpuTempC = 51)
+        assertEquals(s, WearLink.decode(WearLink.encode(s)))
+    }
 }

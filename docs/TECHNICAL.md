@@ -11,6 +11,21 @@ The in-depth companion to the [README](../README.md): how each feature works, si
 - **Release asset names stay `truenas-companion-release.apk` and `truenas-companion-debug.apk`** (each with a `.sha256` file). Older updaters look for exactly these names in the latest release; renaming them to `ytn-*.apk` would leave every 1.7.x install stuck. They will keep these names.
 - **Trademark.** YTN is an independent project, not affiliated with or endorsed by iXsystems. TrueNAS is a trademark of iXsystems, Inc.
 
+## What's new in 1.12.5
+
+**Watch temperature (issue #12, TrueNAS 27).** On 27.0.0-RC.1 the watch showed CPU and RAM but no temperature. 1.12.4 only used the netdata `disktemp` history: `reporting.netdata_graphs` identifiers, then the lowest value per disk over the last 10 minutes.
+
+- **Why it was fragile.** `truenas_disk_temp.chart.py` samples every 300 s in both 25.10 and 27, so a 10-minute window holds about two samples. On 27, netdata is newer (the UPS charts moved from `nut_*` to go.d `upsd_*`, and the python.d plugins to `/usr/libexec/netdata` with a new `TNService` base class). Its charts are only queryable from the next 300 s boundary after start-up, so short windows can be empty. The chart also stores "no reading" as `0` (`temp_c or 0`), and the old code took that 0 as the disk's lowest temperature. With no disk above 0, the watch got no value.
+- **Unchanged between 25.10 and TS-27.0.0-RC.1:** the middleware's `DiskTempPlugin` / `CPUTempPlugin` graph code, `disk.temperatures(names, include_thresholds)`, `disk.temperature_agg` and `Disk.temp()` (sysfs `drivetemp` / `nvme` hwmon).
+- **Now** (`WatchRefresh.stats`), each step only when the previous one found nothing:
+  1. `disk.temperatures([])`: current values for all disks, cached 5 minutes on the NAS. This is the same call the dashboard uses. Checked read-only on 25.10.8: `{sdb: 52.0, sda: 53.0, sdd: 51.0, sdc: 53.0, nvme0n1: 25.85}`.
+  2. The newest real `disktemp` reading per disk over 30 minutes (by timestamp; falls back to the aggregated max).
+  3. `cputemp` (one column per core): the hottest core's 5-minute mean. It goes to the watch as `WearStatus.cpuTempC`, which is optional, so the format version stays 1. It's shown with the CPU: *CPU 16%, 45 °C · RAM 50%*. A disk temperature always wins, and the main screen still says *Disks 38 °C*.
+- Values that are 0, NaN or 150 °C and above count as "no reading". This also applies to the *disk stayed above X °C* rule (`diskTempLowest`): before, a single "no reading" sample made a disk's lowest temperature 0, so the rule could not fire.
+- **Phone app.** The dashboard's disk temperatures already use `disk.temperatures`, so they're unaffected. The Disks page min/max/avg (`disk.temperature_agg`) and the Reports *Disk temperature* chart read the same netdata `disktemp` history; they show whatever the NAS has recorded.
+
+Tests: `V1125TemperatureTest`, plus additions to `WearLinkV1124Test` and `WearPureTest`. Not tested on a real TrueNAS 27 system.
+
 ## What's new in 1.12.4
 
 Follow-up to issue #12, with the reporter's suggestions for the watch app. Still WebSocket only and read-only, except the reboot / shutdown that the phone already had.

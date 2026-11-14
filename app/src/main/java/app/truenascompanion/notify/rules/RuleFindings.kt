@@ -1,6 +1,7 @@
 package app.truenascompanion.notify.rules
 
 import app.truenascompanion.data.api.ReportingApi
+import app.truenascompanion.data.api.obj
 import app.truenascompanion.data.api.TrueNasApi
 import app.truenascompanion.data.api.CertificatesApi
 import app.truenascompanion.data.api.ProtectionApi
@@ -32,6 +33,12 @@ interface RuleData {
     suspend fun ramAverage(minutes: Int): Double?
     /** Per disk, the lowest temperature over the last [minutes] (so "stayed above X" = lowest > X). */
     suspend fun diskTempLowest(minutes: Int): Map<String, Double>?
+    /** 1.12.5: per disk, the current temperature (`disk.temperatures`; disks without a sensor are left out). */
+    suspend fun diskTempNow(): Map<String, Double>? = null
+    /** 1.12.5: per disk, the newest real reading in the last [minutes] of netdata history (0 = no reading, skipped). */
+    suspend fun diskTempLatest(minutes: Int): Map<String, Double>? = null
+    /** 1.12.5: the hottest CPU core's average temperature over the last [minutes] (netdata `cputemp`), or null. */
+    suspend fun cpuTempAverage(minutes: Int): Double? = null
 }
 
 /** Live [RuleData] over one connection. Verified against TrueNAS 25.10 (see docs/TECHNICAL.md, 1.10.0). */
@@ -67,14 +74,36 @@ class ApiRuleData(private val api: TrueNasApi, private val now: () -> Long = Sys
         RuleFindings.ramPercent(total.toDouble(), avail, arc)
     }
 
-    override suspend fun diskTempLowest(minutes: Int) = once("temp$minutes") {
-        val ids = ReportingApi(api).graphs().firstOrNull { it.name == "disktemp" }?.identifiers.orEmpty()
+    private suspend fun diskTempWindow(minutes: Int) = once("tempwin$minutes") {
+        val ids = once("graphs") { ReportingApi(api).graphs() }?.firstOrNull { it.name == "disktemp" }?.identifiers.orEmpty()
         if (ids.isEmpty()) return@once null
-        window(ids.map { "disktemp" to it }, minutes).mapNotNull { d ->
-            val s = d.series.firstOrNull() ?: return@mapNotNull null
-            val low = s.values.filter { !it.isNaN() }.minOrNull()?.toDouble() ?: s.min ?: return@mapNotNull null
+        window(ids.map { "disktemp" to it }, minutes)
+    }
+
+    // 1.12.5: the disk-temperature chart writes 0 when a disk has no reading (truenas_disk_temp.chart.py:
+    // `temp_c or 0`), so 0 is "no reading", not 0 °C. Before, one such sample made a disk's lowest value 0.
+    override suspend fun diskTempLowest(minutes: Int) = once("temp$minutes") {
+        diskTempWindow(minutes)?.mapNotNull { d ->
+            val low = RuleFindings.diskLowest(d.series.firstOrNull() ?: return@mapNotNull null) ?: return@mapNotNull null
             RuleFindings.diskName(d.identifier ?: return@mapNotNull null) to low
-        }.toMap()
+        }?.toMap()
+    }
+
+    override suspend fun diskTempLatest(minutes: Int) = once("templatest$minutes") {
+        diskTempWindow(minutes)?.mapNotNull { d ->
+            val last = RuleFindings.latestReading(d.times, d.series.firstOrNull() ?: return@mapNotNull null) ?: return@mapNotNull null
+            RuleFindings.diskName(d.identifier ?: return@mapNotNull null) to last
+        }?.toMap()
+    }
+
+    /** `disk.temperatures([])`: all disks, current values (the NAS caches them for 5 minutes). Same in 25.10 and 27. */
+    override suspend fun diskTempNow() = once("tempnow") {
+        val o = api.rpc("disk.temperatures", kotlinx.serialization.json.JsonArray(emptyList())).obj() ?: return@once null
+        app.truenascompanion.data.api.Parsers.diskTemperatures(o).filterValues { RuleFindings.realTemp(it) }
+    }
+
+    override suspend fun cpuTempAverage(minutes: Int) = once("cputemp$minutes") {
+        RuleFindings.cpuTempMax(window(listOf("cputemp" to null), minutes).firstOrNull() ?: return@once null)
     }
 }
 
@@ -100,6 +129,23 @@ object RuleFindings {
 
     /** "sda | Type: HDD | Model: … " → "sda". */
     fun diskName(identifier: String) = identifier.substringBefore(" | ").trim()
+
+    /** 1.12.5: a plausible temperature reading (netdata stores "no reading" as 0; NaN = no sample). */
+    fun realTemp(v: Double): Boolean = v.isFinite() && v > 0.0 && v < 150.0
+
+    /** Lowest real reading of a disk-temperature series, falling back to the aggregated minimum. */
+    fun diskLowest(s: app.truenascompanion.data.model.ReportSeries): Double? =
+        s.values.map { it.toDouble() }.filter(::realTemp).minOrNull() ?: s.min?.takeIf(::realTemp)
+
+    /** Newest real reading of a series (by time), falling back to the aggregated maximum (charts sampled every 5 minutes). */
+    fun latestReading(times: LongArray, s: app.truenascompanion.data.model.ReportSeries): Double? =
+        s.values.indices.filter { realTemp(s.values[it].toDouble()) }.maxByOrNull { times.getOrElse(it) { it.toLong() } }
+            ?.let { s.values[it].toDouble() } ?: s.max?.takeIf(::realTemp)
+
+    /** `cputemp` has one column per core: the hottest core's mean, ignoring "no reading" zeros. */
+    fun cpuTempMax(d: app.truenascompanion.data.model.ReportData): Double? = d.series.mapNotNull { s ->
+        s.values.map { it.toDouble() }.filter(::realTemp).takeIf { it.isNotEmpty() }?.average() ?: s.mean?.takeIf(::realTemp)
+    }.maxOrNull()
 
     /** What [rule] finds right now; null when its data isn't available ([data] null: no connection). */
     suspend fun evaluate(rule: AlertRule, data: RuleData?, unreachableSince: Long?, now: Long): List<Finding>? {

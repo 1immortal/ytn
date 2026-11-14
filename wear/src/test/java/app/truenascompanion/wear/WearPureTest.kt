@@ -53,4 +53,10 @@ class WearPureTest {
         assertEquals("Shut down the NAS?", powerQuestion(app.truenascompanion.wearlink.WearLink.POWER_SHUTDOWN, null).first)
         assertTrue(powerQuestion(app.truenascompanion.wearlink.WearLink.POWER_SHUTDOWN, "nas").second.contains("phone asks again"))
     }
+
+    // 1.12.5 (issue #12): no disk temperature on the NAS -> the tile shows the CPU temperature with the CPU.
+    @Test fun tileShowsCpuTemperatureFallback() {
+        val s = WearStatus(serverName = "nas", online = true, cpuPercent = 16, ramPercent = 50, cpuTempC = 45, updatedAt = 1)
+        assertTrue(StatusTileLayout.lines(s, now = 2).contains("CPU 16%, 45\u00A0°C · RAM 50%"))
+    }
 }
