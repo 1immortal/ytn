@@ -21,7 +21,7 @@ object WatchRefresh {
         val data = app.truenascompanion.notify.rules.ApiRuleData(api)
         val titles = if (c.wear.titlesAllowed() && openAlerts.isNotEmpty()) titles(c, server, api, openAlerts) else emptyMap()
         val s = stats(data)
-        return WearExtras(openAlerts, titles, s.cpu, s.ram, s.temp)
+        return WearExtras(openAlerts, titles, s.cpu, s.ram, s.temp, s.cpuTemp)
     }
 
     private suspend fun titles(c: AppContainer, server: ServerConfig, api: TrueNasApi, open: List<AlertItem>): Map<String, String> {
@@ -36,14 +36,34 @@ object WatchRefresh {
     fun titlesFor(open: List<AlertItem>, known: Map<String, String>, classTitles: Map<String, String>): Map<String, String> =
         open.associate { it.uuid to (known[it.uuid] ?: AlertDiff.title(it, classTitles)) }
 
-    data class Stats(val cpu: Int?, val ram: Int?, val temp: Int?)
+    /** [temp] is the hottest disk; [cpuTemp] (1.12.5) is only read when no disk reports a temperature. */
+    data class Stats(val cpu: Int?, val ram: Int?, val temp: Int?, val cpuTemp: Int? = null)
 
-    /** CPU and RAM averaged over 5 minutes, the hottest disk over 10 (same as the alert check). Works on 25.10 and 27. */
-    suspend fun stats(data: RuleData) = Stats(
-        cpu = optional { data.cpuAverage(5) }?.let { pct(it) },
-        ram = optional { data.ramAverage(5) }?.let { pct(it) },
-        temp = optional { data.diskTempLowest(10) }?.values?.maxOrNull()?.takeIf { it.isFinite() && it > 0 }?.toInt(),
-    )
+    /**
+     * CPU and RAM averaged over 5 minutes. Temperature (1.12.5, issue #12: missing on TrueNAS 27):
+     * 1. `disk.temperatures` (current values; the same call and answer on 25.10 and 27),
+     * 2. else the newest real reading of the netdata `disktemp` charts in the last 30 minutes (sampled every 5 minutes;
+     *    the old 10-minute "lowest" window only had about two samples, and a "no reading" 0 hid the value),
+     * 3. else the hottest CPU core (netdata `cputemp`, 5 minutes), shown as a CPU temperature.
+     * Each step only runs when the one before found nothing; anything missing is left out.
+     */
+    suspend fun stats(data: RuleData): Stats {
+        val disk = hottestDisk(optional { data.diskTempNow() }) ?: hottestDisk(optional { data.diskTempLatest(30) })
+        val cpuTemp = if (disk != null) null else optional { data.cpuTempAverage(5) }?.let { temp(it) }
+        return Stats(
+            cpu = optional { data.cpuAverage(5) }?.let { pct(it) },
+            ram = optional { data.ramAverage(5) }?.let { pct(it) },
+            temp = disk,
+            cpuTemp = cpuTemp,
+        )
+    }
+
+    /** The hottest disk with a real reading, in whole °C (pure, unit tested). */
+    fun hottestDisk(temps: Map<String, Double>?): Int? =
+        temps?.values?.filter { app.truenascompanion.notify.rules.RuleFindings.realTemp(it) }?.maxOrNull()?.let { temp(it) }
+
+    /** Whole °C, or null for "no reading" (0, NaN, nonsense). */
+    fun temp(v: Double): Int? = v.takeIf { app.truenascompanion.notify.rules.RuleFindings.realTemp(it) }?.let { Math.round(it).toInt() }
 
     /** Clamped to 0..100; NaN (no samples) counts as unknown. */
     fun pct(v: Double): Int? = v.takeIf { it.isFinite() }?.let { Math.round(it).toInt().coerceIn(0, 100) }

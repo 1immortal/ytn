@@ -58,8 +58,8 @@ class WearBridge(private val context: Context, private val scope: CoroutineScope
     /** True when alert titles may go to the watch at all (setting and lock-screen privacy). */
     fun titlesAllowed(): Boolean = showTitles && WearPolicy.systemAllowsPrivate(context)
 
-    fun onChecked(serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, ram: Int? = null) = update {
-        WearPolicy.withAlerts(it, serverName, alerts, titles, cpu, temp, titlesAllowed(), ram)
+    fun onChecked(serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, ram: Int? = null, cpuTemp: Int? = null) = update {
+        WearPolicy.withAlerts(it, serverName, alerts, titles, cpu, temp, titlesAllowed(), ram, cpuTemp)
     }
 
     fun onWake(label: String?, canWake: Boolean) = update { it.copy(wakeLabel = label, canWake = canWake) }
@@ -116,6 +116,8 @@ data class WearExtras(
     val cpu: Int?,
     val ram: Int?,
     val temp: Int?,
+    /** 1.12.5: CPU temperature, only when no disk reports one. */
+    val cpuTemp: Int? = null,
 )
 
 /** How [WearStatus] is built (pure, unit tested). */
@@ -143,6 +145,7 @@ object WearPolicy {
             cpuPercent = if (sameServer) prev.cpuPercent else null,
             ramPercent = if (sameServer) prev.ramPercent else null,
             tempC = if (sameServer) prev.tempC else null,
+            cpuTempC = if (sameServer) prev.cpuTempC else null,
             canWake = canWake ?: prev.canWake,
             updatedAt = s.updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
         )
@@ -152,14 +155,16 @@ object WearPolicy {
     fun fromRefresh(prev: WearStatus, s: WidgetSnapshot, canWake: Boolean?, extras: WearExtras?, showTitles: Boolean): WearStatus {
         val base = fromSnapshot(prev, s, canWake)
         if (extras == null || s.error != null || s.serverName == null) return base
-        return withAlerts(base, s.serverName, extras.alerts, extras.titles, extras.cpu, extras.temp, showTitles, extras.ram).copy(updatedAt = base.updatedAt)
+        return withAlerts(base, s.serverName, extras.alerts, extras.titles, extras.cpu, extras.temp, showTitles, extras.ram, extras.cpuTemp).copy(updatedAt = base.updatedAt)
     }
 
     /**
      * Alerts from the phone-alert check or (1.12.4) the widget refresh: open ones, worst first, at most
      * [WearLink.MAX_ALERTS], titles only. [titles] maps alert uuids to titles; missing ones fall back to the class.
      */
-    fun withAlerts(prev: WearStatus, serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, showTitles: Boolean, ram: Int? = null): WearStatus {
+    fun withAlerts(prev: WearStatus, serverName: String, alerts: List<AlertItem>, titles: Map<String, String>, cpu: Int?, temp: Int?, showTitles: Boolean, ram: Int? = null, cpuTemp: Int? = null): WearStatus {
+        // 1.12.5: a new reading (disk or CPU) replaces both temperatures; with none, the last ones are kept.
+        val newTemp = temp != null || cpuTemp != null
         val open = alerts.filter { !it.dismissed }.sortedBy { rank(it.level) }
         return prev.copy(
             serverName = serverName,
@@ -170,7 +175,8 @@ object WearPolicy {
             alertsHidden = !showTitles && open.isNotEmpty(),
             cpuPercent = cpu ?: prev.cpuPercent,
             ramPercent = ram ?: prev.ramPercent,
-            tempC = temp ?: prev.tempC,
+            tempC = if (newTemp) temp else prev.tempC,
+            cpuTempC = if (newTemp) cpuTemp else prev.cpuTempC,
             updatedAt = System.currentTimeMillis(),
         )
     }

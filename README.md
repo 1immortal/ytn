@@ -101,7 +101,7 @@ You need Android 8.0 or newer and TrueNAS 25.04 or newer. TrueNAS 25.10 is fully
 
 ### On your watch (Wear OS)
 
-The watch app shows your NAS's health, CPU, memory and disk temperature, a tile, a complication and your alerts. In an emergency you can also reboot or shut down the NAS from the watch: your phone always asks you to confirm first, and you can turn this off in System › Phone alerts. It gets everything from YTN on your phone, so it never needs your NAS password. You need a Wear OS 3+ watch paired with the phone, **Google Play services on both** (the phone and watch talk through it), and YTN 1.12 or newer on the phone.
+The watch app shows your NAS's health, CPU, memory and temperature (disks, or the CPU when no disk reports one), a tile, a complication and your alerts. In an emergency you can also reboot or shut down the NAS from the watch: your phone always asks you to confirm first, and you can turn this off in System › Phone alerts. It gets everything from YTN on your phone, so it never needs your NAS password. You need a Wear OS 3+ watch paired with the phone, **Google Play services on both** (the phone and watch talk through it), and YTN 1.12 or newer on the phone.
 
 The watch app isn't on the Play Store, so install it once from a computer:
 

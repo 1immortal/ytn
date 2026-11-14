@@ -108,7 +108,7 @@ class AppContainer(app: Application) {
             if (server.id == settings.activeServerId.first() && wear.watchConnected()) {
                 // 1.12.4: RAM too, with the same rounding as the widget-refresh path.
                 val st = app.truenascompanion.wear.WatchRefresh.stats(data)
-                wear.onChecked(server.name.ifBlank { server.displayHost }, alerts, titles, st.cpu, st.temp, st.ram)
+                wear.onChecked(server.name.ifBlank { server.displayHost }, alerts, titles, st.cpu, st.temp, st.ram, st.cpuTemp)
             }
         }
         appScope.launch {
