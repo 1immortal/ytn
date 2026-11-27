@@ -265,13 +265,13 @@ class V1120Test {
         assertTrue(d.toString().contains("d.apk"))
     }
 
-    @Test fun phoneAndWearVersionsAre1125() {
+    @Test fun phoneAndWearVersionsAre1126() {
         val gradle = File("build.gradle.kts").readText()
-        assertTrue(gradle.contains("versionCode = 37"))
-        assertTrue(gradle.contains("versionName = \"1.12.5\""))
+        assertTrue(gradle.contains("versionCode = 38"))
+        assertTrue(gradle.contains("versionName = \"1.12.6\""))
         val wear = File("../wear/build.gradle.kts").readText()
-        assertTrue(wear.contains("versionCode = 37"))
-        assertTrue(wear.contains("versionName = \"1.12.5\""))
+        assertTrue(wear.contains("versionCode = 38"))
+        assertTrue(wear.contains("versionName = \"1.12.6\""))
         assertTrue(wear.contains("applicationId = \"app.truenascompanion\""))
         assertTrue(wear.contains("minSdk = 30"))
         assertTrue(wear.contains("isDebuggable = false"))
